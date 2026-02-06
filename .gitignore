@@ -205,3 +205,12 @@ character/
 
 /src/modules/UI/pictures/*
 dashboard.ini
+._.DS_Store
+
+._.git
+
+._.gitignore
+
+._.vscode
+
+._.env.template
