@@ -34,7 +34,7 @@ CONFIG = load_config()
 CAPABILITIES = get_capabilities()
 character_manager = None
 memory_manager = None
-show_bot_response = CONFIG["DEBUG"].get("show_bot_response", True)
+show_bot_response = CONFIG["DEBUG"].getboolean("show_bot_response", True)
 describe_camera_view_openai = None
 try:
     from modules.module_vision import describe_camera_view_openai as _dcvo
