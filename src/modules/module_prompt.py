@@ -170,10 +170,16 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
     longitude = config["CHAR"].get("longitude", "")
     location_name = config["CHAR"].get("location_name", "")
     if GEOLOCATION.get("lat") and GEOLOCATION.get("lon"):
-        _resolve_location_name(
+        resolved = _resolve_location_name(
             GEOLOCATION.get("lat"),
             GEOLOCATION.get("lon"),
         )
+        if resolved:
+            location_line = (
+                f"Your current location: {resolved} ({latitude}, {longitude})"
+            )
+        else:
+            location_line = f"Your current coordinates: {latitude}, {longitude}"
     elif location_name:
         location_line = f"Your current location: {location_name}"
         if latitude and longitude:
