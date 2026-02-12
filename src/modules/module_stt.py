@@ -43,7 +43,8 @@ pvporcupine = None
 PvRecorder = None
 OpenAI = None
 WakeWordSystem = None
-
+FASTRTC_MAX_SILENT_FRAMES_INITIAL_WAKE = 120
+FASTRTC_MAX_SILENT_FRAMES = 30
 # Torch and related (Pi5 only for Silero VAD)
 if CAPABILITIES is None or CAPABILITIES.can_use_embeddings:
     try:
@@ -537,6 +538,18 @@ class STTManager:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
 
+    def check_conversation_timeout(self, speech_paused_count, conversation_started):
+        """Check if the conversation should be considered ended based on silence."""
+        if conversation_started and speech_paused_count < FASTRTC_MAX_SILENT_FRAMES:
+            return False
+        if (
+            not conversation_started
+            and speech_paused_count < FASTRTC_MAX_SILENT_FRAMES_INITIAL_WAKE
+        ):
+            return False
+
+        return True
+
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT with improved speech detection."""
         audio_buffer = BytesIO()
@@ -545,7 +558,6 @@ class STTManager:
         conversation_started = False
         pre_roll_buffer = []
         PRE_ROLL_FRAMES = 10
-        MAX_SILENT_FRAMES = 30
         speech_paused_frames = 0
 
         with (
@@ -558,7 +570,9 @@ class STTManager:
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
 
-            while speech_paused_frames < MAX_SILENT_FRAMES:
+            while not self.check_conversation_timeout(
+                speech_paused_frames, conversation_started
+            ):
                 data, _ = stream.read(4000)
 
                 is_silence, detected_speech, silent_frames = (
@@ -583,6 +597,9 @@ class STTManager:
 
                     if not is_silence:
                         speech_paused_frames = 0
+
+        if not conversation_started:
+            return None
 
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
