@@ -277,6 +277,7 @@ class STTManager:
     def start(self):
         """Start the STT processing loop in a separate thread."""
         self.running = True
+        self.play_wav("../stt/beep_on.wav")
         self.thread = threading.Thread(
             target=self._stt_processing_loop, name="STTThread", daemon=True
         )
@@ -541,12 +542,12 @@ class STTManager:
         """Check if the conversation should be considered ended based on silence."""
         if (
             conversation_started
-            and speech_paused_count < CONFIG["STT"]["fastrtc_conversation_timeout"]
+            and speech_paused_count < self.config["STT"]["fastrtc_conversation_timeout"]
         ):
             return False
         if (
             not conversation_started
-            and speech_paused_count < CONFIG["STT"]["fastrtc_standby_timer"]
+            and speech_paused_count < self.config["STT"]["fastrtc_standby_timer"]
         ):
             return False
 
