@@ -43,10 +43,6 @@ pvporcupine = None
 PvRecorder = None
 OpenAI = None
 WakeWordSystem = None
-FASTRTC_MAX_SILENT_FRAMES_INITIAL_WAKE = 120  # around 10 seconds
-FASTRTC_MAX_SILENT_FRAMES = (
-    30  # around 2.5 seconds of silence before ending conversation
-)
 
 # Torch and related (Pi5 only for Silero VAD)
 if CAPABILITIES is None or CAPABILITIES.can_use_embeddings:
@@ -543,11 +539,14 @@ class STTManager:
 
     def check_conversation_timeout(self, speech_paused_count, conversation_started):
         """Check if the conversation should be considered ended based on silence."""
-        if conversation_started and speech_paused_count < FASTRTC_MAX_SILENT_FRAMES:
+        if (
+            conversation_started
+            and speech_paused_count < CONFIG["STT"]["fastrtc_conversation_timeout"]
+        ):
             return False
         if (
             not conversation_started
-            and speech_paused_count < FASTRTC_MAX_SILENT_FRAMES_INITIAL_WAKE
+            and speech_paused_count < CONFIG["STT"]["fastrtc_standby_timer"]
         ):
             return False
 

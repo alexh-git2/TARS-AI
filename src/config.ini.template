@@ -35,6 +35,10 @@ speechdelay = 300
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
+fastrtc_standby_timer = 180 # Around 2 seconds
+# Time in seconds before the fastrtc wake word processor goes into standby mode
+fastrtc_conversation_timeout = 20 # around 3 seconds
+# Time in seconds to wait for a response before timing out to process the the conversation
 
 [CHAR] # Character-specific details
 character_card_path = character/PLEX/PLEX.json
