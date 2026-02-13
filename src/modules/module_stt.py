@@ -555,78 +555,83 @@ class STTManager:
 
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT with improved speech detection."""
-        audio_buffer = BytesIO()
-        detected_speech = False
-        silent_frames = 0
-        conversation_started = False
-        pre_roll_buffer = []
-        PRE_ROLL_FRAMES = 10
-        speech_paused_frames = 0
+        transcript = None
+        formatted_result = None
+        while not transcript:
+            audio_buffer = BytesIO()
+            detected_speech = False
+            silent_frames = 0
+            conversation_started = False
+            pre_roll_buffer = []
+            PRE_ROLL_FRAMES = 10
+            speech_paused_frames = 0
 
-        with (
-            sd.InputStream(
-                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-            ) as stream,
-            wave.open(audio_buffer, "wb") as wf,
-        ):
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(self.SAMPLE_RATE)
-
-            while not self.check_conversation_timeout(
-                speech_paused_frames, conversation_started
+            with (
+                sd.InputStream(
+                    samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+                ) as stream,
+                wave.open(audio_buffer, "wb") as wf,
             ):
-                data, _ = stream.read(4000)
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(self.SAMPLE_RATE)
 
-                is_silence, detected_speech, silent_frames = (
-                    self.voice_activity_detection_main(
-                        data, detected_speech, silent_frames
+                while not self.check_conversation_timeout(
+                    speech_paused_frames, conversation_started
+                ):
+                    data, _ = stream.read(4000)
+
+                    is_silence, detected_speech, silent_frames = (
+                        self.voice_activity_detection_main(
+                            data, detected_speech, silent_frames
+                        )
                     )
-                )
 
-                if not detected_speech:
-                    speech_paused_frames += 1
-                    pre_roll_buffer.append(data.tobytes())
-                    if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
-                        pre_roll_buffer.pop(0)
-                else:
-                    if not conversation_started:
-                        for pre_roll_data in pre_roll_buffer:
-                            wf.writeframes(pre_roll_data)
-                        pre_roll_buffer = []
-                        conversation_started = True
+                    if not detected_speech:
+                        speech_paused_frames += 1
+                        pre_roll_buffer.append(data.tobytes())
+                        if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
+                            pre_roll_buffer.pop(0)
+                    else:
+                        if not conversation_started:
+                            for pre_roll_data in pre_roll_buffer:
+                                wf.writeframes(pre_roll_data)
+                            pre_roll_buffer = []
+                            conversation_started = True
 
-                    wf.writeframes(data.tobytes())
+                        wf.writeframes(data.tobytes())
 
-                    if not is_silence:
-                        speech_paused_frames = 0
+                        if not is_silence:
+                            speech_paused_frames = 0
 
-        if not conversation_started:
-            return None
+            if not conversation_started:
+                return None
 
-        audio_buffer.seek(0)
-        if audio_buffer.getbuffer().nbytes == 0:
-            return None
+            audio_buffer.seek(0)
+            if audio_buffer.getbuffer().nbytes == 0:
+                return None
 
-        audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+            audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
 
-        audio_max = np.abs(audio_data).max()
-        if audio_max < 0.1:
-            audio_data = audio_data * (0.3 / max(audio_max, 0.001))
+            audio_max = np.abs(audio_data).max()
+            if audio_max < 0.1:
+                audio_data = audio_data * (0.3 / max(audio_max, 0.001))
 
-        audio_data = np.clip(audio_data, -1.0, 1.0)
+            audio_data = np.clip(audio_data, -1.0, 1.0)
 
-        transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
+            transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
 
-        self.interactions += 1
+            if transcript:
+                self.interactions += 1
+                formatted_result = {"text": transcript}
+                if self.utterance_callback:
+                    self.utterance_callback(
+                        json.dumps(formatted_result), self.interactions
+                    )
+                break
 
-        if transcript:
-            formatted_result = {"text": transcript}
-            if self.utterance_callback:
-                self.utterance_callback(json.dumps(formatted_result), self.interactions)
-            return formatted_result
-        else:
-            return None
+            # print("DEBUG: No transcript obtained, restarting capture...")
+        return formatted_result
 
     def _transcribe_with_vosk(self):
         """Transcribe audio using the local Vosk model."""
