@@ -537,6 +537,21 @@ class STTManager:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
 
+    def check_conversation_timeout(self, speech_paused_count, conversation_started):
+        """Check if the conversation should be considered ended based on silence."""
+        if (
+            conversation_started
+            and speech_paused_count < self.config["STT"]["fastrtc_conversation_timeout"]
+        ):
+            return False
+        if (
+            not conversation_started
+            and speech_paused_count < self.config["STT"]["fastrtc_standby_timer"]
+        ):
+            return False
+
+        return True
+
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT with improved speech detection."""
         audio_buffer = BytesIO()
@@ -545,7 +560,6 @@ class STTManager:
         conversation_started = False
         pre_roll_buffer = []
         PRE_ROLL_FRAMES = 10
-        MAX_SILENT_FRAMES = 30
         speech_paused_frames = 0
 
         with (
@@ -558,7 +572,9 @@ class STTManager:
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
 
-            while speech_paused_frames < MAX_SILENT_FRAMES:
+            while not self.check_conversation_timeout(
+                speech_paused_frames, conversation_started
+            ):
                 data, _ = stream.read(4000)
 
                 is_silence, detected_speech, silent_frames = (
@@ -588,6 +604,13 @@ class STTManager:
         if audio_buffer.getbuffer().nbytes == 0:
             return None
 
+        if not conversation_started:
+            return None
+
+        audio_buffer.seek(0)
+        if audio_buffer.getbuffer().nbytes == 0:
+            return None
+
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
 
         audio_max = np.abs(audio_data).max()
@@ -601,6 +624,7 @@ class STTManager:
         self.interactions += 1
 
         if transcript:
+            self.interactions += 1
             formatted_result = {"text": transcript}
             if self.utterance_callback:
                 self.utterance_callback(json.dumps(formatted_result), self.interactions)
