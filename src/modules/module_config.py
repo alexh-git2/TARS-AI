@@ -79,7 +79,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
             "openai",
             "azure",
         },
-        allowed_vad={"silero", "rms"},
+        allowed_vad={"silero", "rms", "fastrtc"},
         allowed_wake={"picovoice", "fastrtc", "atomik"},
         can_use_embeddings=True,
         can_use_ui=True,
