@@ -541,7 +541,7 @@ class STTManager:
         """Check if the conversation should be considered ended based on silence."""
         if (
             conversation_started
-            and speech_paused_count < self.config["STT"]["fastrtc_conversation_timeout"]
+            and speech_paused_count < self.config["STT"]["speechdelay"]
         ):
             return False
         if (
