@@ -446,7 +446,6 @@ def load_config():
             "picovoice_keyword_path": config["STT"]["picovoice_keyword_path"],
             "wake_word_processor": config["STT"]["wake_word_processor"],
             "picovoice_api_key": os.getenv("PICOVOICE_API_KEY"),
-            "fastrtc_standby_timer": int(config["STT"]["fastrtc_standby_timer"]),
         },
         "CHAR": {
             "character_name": character_name,
