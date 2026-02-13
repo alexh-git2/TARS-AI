@@ -1205,6 +1205,10 @@ class STTManager:
             )
         elif self.vadmethod == "rms":
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+        elif self.vadmethod == "fastrtc":
+            return self._is_silence_detected_fastrtc(
+                data, detected_speech, silent_frames
+            )
         else:
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
 
@@ -1278,6 +1282,49 @@ class STTManager:
             return False, detected_speech, silent_frames
 
     def _is_silence_detected_rms(self, data, detected_speech, silent_frames):
+        """RMS-based silence detection with visual progress bar"""
+        try:
+            update_bar, clear_bar = self._init_progress_bar()
+            self.DEBUG = False
+            rms = self.prepare_audio_data(self.amplify_audio(data))
+            self.silence_threshold_margin = self.silence_threshold * self.silence_margin
+
+            if rms is None:
+                # Even if RMS calculation fails, return proper tuple
+                return False, detected_speech, silent_frames
+
+            if rms > self.silence_threshold_margin:
+                detected_speech = True
+                silent_frames = 0
+
+                if self.DEBUG:
+                    queue_message(
+                        f"AUDIO: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}"
+                    )
+
+                clear_bar()
+            else:
+                silent_frames += 1
+
+                if self.DEBUG:
+                    queue_message(
+                        f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}"
+                    )
+
+                update_bar(silent_frames, self.MAX_SILENT_FRAMES)
+
+                if silent_frames > self.MAX_SILENT_FRAMES:
+                    clear_bar()
+                    return True, detected_speech, silent_frames
+
+            return False, detected_speech, silent_frames
+
+        except Exception as e:
+            queue_message(f"ERROR: RMS silence detection failed: {e}")
+            # Return safe default values
+            return False, detected_speech, silent_frames
+
+    def _is_silence_detected_fastrtc(self, data, detected_speech, silent_frames):
         """RMS-based silence detection with visual progress bar"""
         try:
             update_bar, clear_bar = self._init_progress_bar()
