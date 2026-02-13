@@ -33,6 +33,9 @@ vad_method = rms
 # Enable silero, rms
 speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
+conversation_silence_delay = 180
+# conversation has started, user might be pausing to think, so give them more time before we assume silence
+# Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
 

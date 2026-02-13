@@ -221,6 +221,7 @@ class STTManager:
         self.silence_threshold = None  # Updated after measuring background noise
         self.MAX_RECORDING_FRAMES = 100  # ~12.5 seconds
         self.MAX_SILENT_FRAMES = CONFIG["STT"]["speechdelay"]
+        self.CONVERSATION_SILENCE_FRAMES = CONFIG["STT"]["conversation_silence_delay"]
 
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None
@@ -749,7 +750,7 @@ class STTManager:
         audio_buffer = BytesIO()
         detected_speech = False
         silent_frames = 0
-        max_silent_frames = self.MAX_SILENT_FRAMES
+        frames = 0
 
         with (
             sd.InputStream(
@@ -760,7 +761,7 @@ class STTManager:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
-            for _ in range(self.MAX_RECORDING_FRAMES):
+            for _ in range(self.CONVERSATION_SILENCE_FRAMES):
                 data, _ = stream.read(4000)
 
                 is_silence, detected_speech, silent_frames = (
@@ -768,12 +769,20 @@ class STTManager:
                         data, detected_speech, silent_frames
                     )
                 )
-                if is_silence:
-                    if not detected_speech:
-                        return None
-                    break
+
+                # print(
+                #    f"DEBUG: {frames} Silence Detection - is_silence: {is_silence}, detected_speech: {detected_speech}, silent_frames: {silent_frames}",
+                # )
+                if is_silence and detected_speech:
+                    #   if not detected_speech:
+                    #      print("DEBUG: No speech detected, returning None.")
+                    #      return None
+                    if silent_frames >= self.MAX_SILENT_FRAMES:
+                        print("DEBUG: Max silent frames reached, ending recording.")
+                        break
 
                 wf.writeframes(data.tobytes())
+                frames += 1
 
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
@@ -793,6 +802,7 @@ class STTManager:
         transcribed_text = " ".join(segment.text for segment in segments).strip()
         if transcribed_text:
             formatted_result = {"text": transcribed_text}
+            self.interactions += 1
             if self.utterance_callback:
                 self.utterance_callback(json.dumps(formatted_result))
             return formatted_result
@@ -927,6 +937,7 @@ class STTManager:
     def _stt_processing_loop(self):
         """Main loop that detects the wake word and transcribes utterances."""
         queue_message("INFO: Starting STT processing loop...")
+        self.play_wav("../stt/beep_on.wav")
         while self.running and not self.shutdown_event.is_set():
             # Skip processing if paused (e.g., during video playback)
             if self.is_paused():
@@ -1228,7 +1239,7 @@ class STTManager:
                             audio_tensor,
                             self.silero_vad_model,
                             sampling_rate=self.SAMPLE_RATE,
-                            threshold=0.3,
+                            threshold=0.5,
                             min_speech_duration_ms=100,
                             return_seconds=True,
                         )
