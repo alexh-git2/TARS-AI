@@ -221,7 +221,7 @@ class STTManager:
         self.silence_threshold = None  # Updated after measuring background noise
         self.MAX_RECORDING_FRAMES = 100  # ~12.5 seconds
         self.MAX_SILENT_FRAMES = CONFIG["STT"]["speechdelay"]
-        self.CONVERSATION_SILENCE_FRAMES = CONFIG["STT"]["conversation_silence_delay"]
+        self.CONVERSATION_SILENCE_FRAMES = CONFIG["STT"]["speechdelay_to_standby"]
 
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None
@@ -747,68 +747,77 @@ class STTManager:
 
     def _transcribe_with_faster_whisper(self):
         """Transcribe audio using Faster-Whisper."""
-        audio_buffer = BytesIO()
-        detected_speech = False
-        silent_frames = 0
-        frames = 0
+        max_retries = 3
+        attempt = 0
+        
+        while attempt < max_retries:
+            attempt += 1
+            audio_buffer = BytesIO()
+            detected_speech = False
+            silent_frames = 0
+            frames = 0
 
-        with (
-            sd.InputStream(
-                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-            ) as stream,
-            wave.open(audio_buffer, "wb") as wf,
-        ):
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(self.SAMPLE_RATE)
-            for _ in range(self.CONVERSATION_SILENCE_FRAMES):
-                data, _ = stream.read(4000)
+            with (
+                sd.InputStream(
+                    samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+                ) as stream,
+                wave.open(audio_buffer, "wb") as wf,
+            ):
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(self.SAMPLE_RATE)
+                for _ in range(self.CONVERSATION_SILENCE_FRAMES):
+                    data, _ = stream.read(4000)
 
-                is_silence, detected_speech, silent_frames = (
-                    self.voice_activity_detection_main(
-                        data, detected_speech, silent_frames
+                    is_silence, detected_speech, silent_frames = (
+                        self.voice_activity_detection_main(
+                            data, detected_speech, silent_frames
+                        )
                     )
+
+                    print(
+                        f"DEBUG: {frames} Silence Detection - is_silence: {is_silence}, detected_speech: {detected_speech}, silent_frames: {silent_frames}",
+                    )
+                    if is_silence and detected_speech:
+                        if silent_frames >= self.MAX_SILENT_FRAMES:
+                            print("DEBUG: Max silent frames reached, ending recording.")
+                            attempts = 0
+                            break
+
+                    wf.writeframes(data.tobytes())
+                    frames += 1
+
+            audio_buffer.seek(0)
+            if audio_buffer.getbuffer().nbytes == 0:
+                # print(f"DEBUG: Attempt {attempt}/{max_retries} - No audio recorded.")
+                if attempt < max_retries:
+                    continue
+                # queue_message("ERROR: No audio recorded.")
+                return None
+
+            audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+            audio_data = np.clip(audio_data, -1.0, 1.0)
+            if sample_rate != self.DEFAULT_SAMPLE_RATE:
+                audio_data = librosa.resample(
+                    audio_data, orig_sr=sample_rate, target_sr=self.DEFAULT_SAMPLE_RATE
                 )
 
-                # print(
-                #    f"DEBUG: {frames} Silence Detection - is_silence: {is_silence}, detected_speech: {detected_speech}, silent_frames: {silent_frames}",
-                # )
-                if is_silence and detected_speech:
-                    #   if not detected_speech:
-                    #      print("DEBUG: No speech detected, returning None.")
-                    #      return None
-                    if silent_frames >= self.MAX_SILENT_FRAMES:
-                        print("DEBUG: Max silent frames reached, ending recording.")
-                        break
-
-                wf.writeframes(data.tobytes())
-                frames += 1
-
-        audio_buffer.seek(0)
-        if audio_buffer.getbuffer().nbytes == 0:
-            queue_message("ERROR: No audio recorded.")
-            return None
-
-        audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
-        audio_data = np.clip(audio_data, -1.0, 1.0)
-        if sample_rate != self.DEFAULT_SAMPLE_RATE:
-            audio_data = librosa.resample(
-                audio_data, orig_sr=sample_rate, target_sr=self.DEFAULT_SAMPLE_RATE
+            segments, _ = self.faster_whisper_model.transcribe(
+                audio_data, temperature=0.0, beam_size=1, language="en"
             )
-
-        segments, _ = self.faster_whisper_model.transcribe(
-            audio_data, temperature=0.0, beam_size=1, language="en"
-        )
-        transcribed_text = " ".join(segment.text for segment in segments).strip()
-        if transcribed_text:
-            formatted_result = {"text": transcribed_text}
-            self.interactions += 1
-            if self.utterance_callback:
-                self.utterance_callback(json.dumps(formatted_result))
-            return formatted_result
-        else:
-            # queue_message("ERROR: No transcription from Faster-Whisper.")
-            return None
+            transcribed_text = " ".join(segment.text for segment in segments).strip()
+            if transcribed_text:
+                formatted_result = {"text": transcribed_text}
+                self.interactions += 1
+                if self.utterance_callback:
+                    self.utterance_callback(json.dumps(formatted_result))
+                return formatted_result
+            else:
+                # print(f"DEBUG: Attempt {attempt}/{max_retries} - No transcription from Faster-Whisper.")
+                if attempt < max_retries:
+                    continue
+                # queue_message("ERROR: No transcription from Faster-Whisper.")
+                return None
 
     def _transcribe_silero(self):
         """Transcribe audio using Silero STT."""

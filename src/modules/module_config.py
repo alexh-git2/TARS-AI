@@ -443,8 +443,8 @@ def load_config():
             "use_indicators": config.getboolean("STT", "use_indicators"),
             "vad_method": config["STT"]["vad_method"],
             "speechdelay": int(config["STT"]["speechdelay"]),
-            "conversation_silence_delay": int(
-                config["STT"]["conversation_silence_delay"]
+            "speechdelay_to_standby": int(
+                config["STT"]["speechdelay_to_standby"]
             ),
             "picovoice_keyword_path": config["STT"]["picovoice_keyword_path"],
             "wake_word_processor": config["STT"]["wake_word_processor"],
