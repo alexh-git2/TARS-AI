@@ -37,6 +37,10 @@ standby_timer = 30
 # timer until TARS enters standby mode (seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
+fastrtc_standby_timer = 320
+# Time in seconds before the fastrtc wake word processor goes into standby mode (default: 320 around 30 seconds)
+fastrtc_conversation_timeout = 20
+# Time in seconds to wait for a response before timing out to process the the conversation (default: 20 around 2.5 seconds)
 
 [CHAR] # Character-specific details
 character_card_path = character/PLEX/PLEX.json
