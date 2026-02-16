@@ -875,13 +875,12 @@ class STTManager:
         data_buffer = []
         silent_frames = 0
         detected_speech = False
-        QUEUE_BLOCK_TIMEOUT = 1.0 # seconds
         try:
             self._start_stream_reader(blocksize=4000)      
             target_time = time.time() + self.STANDBY_TIMER
             while time.time() < target_time:                
                 try:
-                    data = self.audio_queue.get(timeout=QUEUE_BLOCK_TIMEOUT)
+                    data = self.audio_queue.get(timeout=1.0)
                 except queue.Empty:
                         continue
                 
@@ -891,37 +890,34 @@ class STTManager:
                         )
                     )
                     
-              #  queue_message(f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}")
+                # queue_message(f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}")
                 if detected_speech:
                      target_time = time.time() + self.STANDBY_TIMER
                                       
                 data_buffer.append(data)        
                
-                if conversation_stopped and len(data_buffer) > 0:
-                       silent_frames = 0
+                if conversation_stopped and len(data_buffer) > 0:                
                        data_arr = np.concatenate(data_buffer)
                        audio_np = np.frombuffer(data_arr, dtype=np.int16)
                        audio_float = audio_np.astype(np.float32) / 32768.0
- 
-                       conversation_text = ''
+  
                        try:
                             segments, _info = self.faster_whisper_model.transcribe(
                                 audio_float, temperature=0.0, beam_size=5, language="en", vad_filter=True)                            
-                            queue_message("Detected language '%s' with probability %f" % (_info.language, _info.language_probability))
+                           
                             conversation_text = " ".join(segment.text for segment in segments).strip()
+                            
                             queue_message(f"### TRANSCRIBED ###: '{conversation_text}' at {time.strftime('%Y-%m-%d %H:%M:%S')}  with probability  %{_info.language_probability}")
+                            if conversation_text:                           
+                               formatted_result = {"text": conversation_text}    
+                               if self.utterance_callback:
+                                self.utterance_callback(json.dumps(formatted_result))
+                                return formatted_result                                         
                        except Exception as e:
                             queue_message(
                                 f"WARNING: Chunk transcription failed: {e}"
                             )
 
-                       if conversation_text:                           
-                            formatted_result = {"text": conversation_text}                 
-                            detected_speech = False               
-                            silent_frames = 0
-                            data_buffer = []
-                  
-                                  
         except Exception as e:
             queue_message(f"ERROR: Faster-Whisper recording failed: {e}")
             return None
@@ -930,7 +926,7 @@ class STTManager:
                 self._stop_stream_reader()
             except Exception:
                 pass
-        queue_message("standby timer going into standby mode")
+     
  
     def _transcribe_silero(self):
         """Transcribe audio using Silero STT."""
@@ -1066,10 +1062,10 @@ class STTManager:
                 time.sleep(0.1)  # Sleep while paused to avoid busy waiting
                 continue
 
-            # if self._detect_wake_word():
+            if self._detect_wake_word():
                 # Check again if paused before transcribing
-            if not self.is_paused():
-                self._transcribe_utterance()
+                if not self.is_paused():
+                    self._transcribe_utterance()
         queue_message("INFO: STT Manager stopped.")
 
     def _detect_wake_word(self) -> bool:
