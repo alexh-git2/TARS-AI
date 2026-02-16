@@ -872,29 +872,19 @@ class STTManager:
             return None
 
     def _transcribe_with_faster_whisper(self):
-        """
-        Transcribe audio using Faster-Whisper in chunked mode.
-        Buffers raw audio chunks and transcribes them incrementally.
-
-        4000/48000 (sample rate)=0.0833 seconds or ~83.3 ms
-        """
         data_buffer = []
         silent_frames = 0
         detected_speech = False
-        conversation_started = False
-        timer_count = 0
         QUEUE_BLOCK_TIMEOUT = 1.0 # seconds
         try:
-            self._start_stream_reader(blocksize=4000)
-            while True:
-                # print(f"timer_count={timer_count} ENTER_STANDBY={self.STANDBY_TIMER}")
+            self._start_stream_reader(blocksize=4000)      
+            target_time = time.time() + self.STANDBY_TIMER
+            while time.time() < target_time:                
                 try:
                     data = self.audio_queue.get(timeout=QUEUE_BLOCK_TIMEOUT)
                 except queue.Empty:
-                     # no data available yet
                         continue
                 
- 
                 conversation_stopped, detected_speech, silent_frames = (
                         self.voice_activity_detection_main(
                             data, detected_speech, silent_frames
@@ -902,11 +892,9 @@ class STTManager:
                     )
                     
               #  queue_message(f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}")
-                if not conversation_started and detected_speech:
-                        conversation_started = True
-
-               # if detected_speech:                           
-                        
+                if detected_speech:
+                     target_time = time.time() + self.STANDBY_TIMER
+                                      
                 data_buffer.append(data)        
                
                 if conversation_stopped and len(data_buffer) > 0:
@@ -918,12 +906,10 @@ class STTManager:
                        conversation_text = ''
                        try:
                             segments, _info = self.faster_whisper_model.transcribe(
-                                audio_float, temperature=0.0, beam_size=5, language="en", vad_filter=True, vad_parameters=dict(min_silence_duration_ms=300)
-                            )
-                            print("Detected language '%s' with probability %f" % (_info.language, _info.language_probability))
-
+                                audio_float, temperature=0.0, beam_size=5, language="en", vad_filter=True)                            
+                            queue_message("Detected language '%s' with probability %f" % (_info.language, _info.language_probability))
                             conversation_text = " ".join(segment.text for segment in segments).strip()
-                            print(f"### TRANSCRIBED ###: '{conversation_text}' at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                            queue_message(f"### TRANSCRIBED ###: '{conversation_text}' at {time.strftime('%Y-%m-%d %H:%M:%S')}  with probability  %{_info.language_probability}")
                        except Exception as e:
                             queue_message(
                                 f"WARNING: Chunk transcription failed: {e}"
@@ -934,19 +920,7 @@ class STTManager:
                             detected_speech = False               
                             silent_frames = 0
                             data_buffer = []
-                            conversation_started = False
-
-                       # else:
-                       #     if silence_count >= 50:  # 10 is good as default 50 for debugging
-                       #         queue_message(
-                       #             f"DEBUG: Returning None - too many empty chunks ({silence_count})"
-                       #         )                             
-                       #         detected_speech = False
-                       #         silent_frames = 0
-                       #         conversation_started = False
-                       #         silence_count = 0
-                       #         data_buffer = []
-                       #         # return None
+                  
                                   
         except Exception as e:
             queue_message(f"ERROR: Faster-Whisper recording failed: {e}")
@@ -956,6 +930,7 @@ class STTManager:
                 self._stop_stream_reader()
             except Exception:
                 pass
+        queue_message("standby timer going into standby mode")
  
     def _transcribe_silero(self):
         """Transcribe audio using Silero STT."""
