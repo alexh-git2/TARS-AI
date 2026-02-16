@@ -876,47 +876,52 @@ class STTManager:
         silent_frames = 0
         detected_speech = False
         try:
-            self._start_stream_reader(blocksize=4000)      
+            self._start_stream_reader(blocksize=4000)
             target_time = time.time() + self.STANDBY_TIMER
-            while time.time() < target_time:                
+            while time.time() < target_time:
                 try:
                     data = self.audio_queue.get(timeout=1.0)
                 except queue.Empty:
-                        continue
-                
+                    continue
+
                 conversation_stopped, detected_speech, silent_frames = (
-                        self.voice_activity_detection_main(
-                            data, detected_speech, silent_frames
-                        )
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
                     )
-                    
+                )
+
                 # queue_message(f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}")
                 if detected_speech:
-                     target_time = time.time() + self.STANDBY_TIMER
-                                      
-                data_buffer.append(data)        
-               
-                if conversation_stopped and len(data_buffer) > 0:                
-                       data_arr = np.concatenate(data_buffer)
-                       audio_np = np.frombuffer(data_arr, dtype=np.int16)
-                       audio_float = audio_np.astype(np.float32) / 32768.0
-  
-                       try:
-                            segments, _info = self.faster_whisper_model.transcribe(
-                                audio_float, temperature=0.0, beam_size=5, language="en", vad_filter=True)                            
-                           
-                            conversation_text = " ".join(segment.text for segment in segments).strip()
-                            
-                            queue_message(f"### TRANSCRIBED ###: '{conversation_text}' at {time.strftime('%Y-%m-%d %H:%M:%S')}  with probability  %{_info.language_probability}")
-                            if conversation_text:                           
-                               formatted_result = {"text": conversation_text}    
-                               if self.utterance_callback:
+                    target_time = time.time() + self.STANDBY_TIMER
+
+                data_buffer.append(data)
+
+                if conversation_stopped and len(data_buffer) > 0:
+                    data_arr = np.concatenate(data_buffer)
+                    audio_np = np.frombuffer(data_arr, dtype=np.int16)
+                    audio_float = audio_np.astype(np.float32) / 32768.0
+
+                    try:
+                        segments, _info = self.faster_whisper_model.transcribe(
+                            audio_float,
+                            temperature=0.0,
+                            beam_size=5,
+                            language="en",
+                            vad_filter=True,
+                        )
+
+                        conversation_text = " ".join(
+                            segment.text for segment in segments
+                        ).strip()
+
+                        # queue_message(f"### TRANSCRIBED ###: '{conversation_text}' at {time.strftime('%Y-%m-%d %H:%M:%S')}  with probability  %{_info.language_probability}")
+                        if conversation_text:
+                            formatted_result = {"text": conversation_text}
+                            if self.utterance_callback:
                                 self.utterance_callback(json.dumps(formatted_result))
-                                return formatted_result                                         
-                       except Exception as e:
-                            queue_message(
-                                f"WARNING: Chunk transcription failed: {e}"
-                            )
+                                return formatted_result
+                    except Exception as e:
+                        queue_message(f"WARNING: Chunk transcription failed: {e}")
 
         except Exception as e:
             queue_message(f"ERROR: Faster-Whisper recording failed: {e}")
@@ -926,8 +931,7 @@ class STTManager:
                 self._stop_stream_reader()
             except Exception:
                 pass
-     
- 
+
     def _transcribe_silero(self):
         """Transcribe audio using Silero STT."""
         audio_buffer = BytesIO()
