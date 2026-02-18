@@ -237,12 +237,6 @@ class STTManager:
         self.silero_model = None  # For Silero STT (if used)
         self.silero_vad_model = None
         self.get_speech_timestamps = None
-        # Threaded audio reader for streaming-based STT processors
-        self.audio_queue: "queue.Queue" = queue.Queue()
-        self._stream_thread: Optional[threading.Thread] = None
-        self._stream_stop_event: threading.Event = threading.Event()
-        self._stream_obj = None
-
         self._initialize_models()
         self.vadmethod = CONFIG["STT"]["vad_method"]
         self.DEBUG = False
