@@ -237,79 +237,9 @@ class STTManager:
         self.silero_model = None  # For Silero STT (if used)
         self.silero_vad_model = None
         self.get_speech_timestamps = None
-        # Threaded audio reader for streaming-based STT processors
-        self.audio_queue: "queue.Queue" = queue.Queue(maxsize=5000)
-        self._stream_thread: Optional[threading.Thread] = None
-        self._stream_stop_event: threading.Event = threading.Event()
-        self._stream_obj = None
-
         self._initialize_models()
         self.vadmethod = CONFIG["STT"]["vad_method"]
         self.DEBUG = False
-
-    def _stream_reader(self, blocksize: int = 4000):
-        """
-        Background thread target that opens an InputStream and pushes frames into `self.audio_queue`.
-        """
-        try:
-            with sd.InputStream(
-                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-            ) as stream:
-                self._stream_obj = stream
-                while not self._stream_stop_event.is_set():
-                    try:
-                        data, _ = stream.read(blocksize)
-                        try:
-                            self.audio_queue.put(data, timeout=0.2)
-                        except queue.Full:
-                            queue_message(
-                                "WARNING: Audio queue is full, dropping oldest frame"
-                            )
-                            # Drop oldest frame to make room if queue is full
-                            try:
-                                _ = self.audio_queue.get_nowait()
-                            except Exception:
-                                pass
-                            try:
-                                self.audio_queue.put_nowait(data)
-                            except Exception:
-                                pass
-                    except Exception:
-                        # brief sleep to avoid busy loop on repeated errors
-                        time.sleep(0.05)
-        except Exception as e:
-            queue_message(f"ERROR: Stream reader failed to start: {e}")
-        finally:
-            self._stream_obj = None
-
-    def _start_stream_reader(self, blocksize: int = 4000):
-        """Start the background InputStream reader thread."""
-        # Reset stop event and start thread if not already running
-        if self._stream_thread and self._stream_thread.is_alive():
-            return
-        self._stream_stop_event.clear()
-        self._stream_thread = threading.Thread(
-            target=self._stream_reader,
-            args=(blocksize,),
-            name="SDStreamReader",
-            daemon=True,
-        )
-        self._stream_thread.start()
-
-    def _stop_stream_reader(self):
-        """Stop the background InputStream reader thread and clear queue."""
-        try:
-            self._stream_stop_event.set()
-            if self._stream_thread:
-                self._stream_thread.join(timeout=2.0)
-        except Exception:
-            pass
-        # drain the queue
-        try:
-            while not self.audio_queue.empty():
-                self.audio_queue.get_nowait()
-        except Exception:
-            pass
 
     def _initialize_models(self):
         """
@@ -348,7 +278,6 @@ class STTManager:
     def start(self):
         """Start the STT processing loop in a separate thread."""
         self.running = True
-        self.play_wav("../stt/beep_on.wav")
         self.thread = threading.Thread(
             target=self._stt_processing_loop, name="STTThread", daemon=True
         )
@@ -609,74 +538,66 @@ class STTManager:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
 
-    def check_conversation_timeout(self, speech_paused_count, conversation_started):
-        """Check if the conversation should be considered ended based on silence."""
-        if (
-            conversation_started
-            and speech_paused_count < self.config["STT"]["fastrtc_conversation_timeout"]
-        ):
-            return False
-        if (
-            not conversation_started
-            and speech_paused_count < self.config["STT"]["fastrtc_standby_timer"]
-        ):
-            return False
-
-        return True
-
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT with improved speech detection."""
         audio_buffer = BytesIO()
         detected_speech = False
         silent_frames = 0
-        conversation_started = False
+        speech_frames = 0
         pre_roll_buffer = []
         PRE_ROLL_FRAMES = 10
-        speech_paused_frames = 0
+        MIN_SPEECH_FRAMES = 5
+        MAX_SILENT_FRAMES = 20
 
-            with (
-                sd.InputStream(
-                    samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-                ) as stream,
-                wave.open(audio_buffer, "wb") as wf,
-            ):
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(self.SAMPLE_RATE)
+        with (
+            sd.InputStream(
+                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+            ) as stream,
+            wave.open(audio_buffer, "wb") as wf,
+        ):
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(self.SAMPLE_RATE)
 
-            while not self.check_conversation_timeout(
-                speech_paused_frames, conversation_started
-            ):
+            for frame_idx in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
 
-                    is_silence, detected_speech, silent_frames = (
-                        self.voice_activity_detection_main(
-                            data, detected_speech, silent_frames
-                        )
+                is_silence, detected_speech, silent_frames = (
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
                     )
+                )
+                silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
 
+                # Add the same early exit check as other functions
+                if is_silence:
                     if not detected_speech:
-                        speech_paused_frames += 1
-                        pre_roll_buffer.append(data.tobytes())
-                        if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
-                            pre_roll_buffer.pop(0)
-                    else:
-                        if not conversation_started:
-                            for pre_roll_data in pre_roll_buffer:
-                                wf.writeframes(pre_roll_data)
-                            pre_roll_buffer = []
-                            conversation_started = True
+                        return None  # Exit early if silence detected before any speech
+                    # If speech was detected, check if we should stop recording
+                    if (
+                        speech_frames >= MIN_SPEECH_FRAMES
+                        and silent_frames >= MAX_SILENT_FRAMES
+                    ):
+                        print()
+                        break
 
-                        wf.writeframes(data.tobytes())
+                if not detected_speech:
+                    pre_roll_buffer.append(data.tobytes())
+                    if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
+                        pre_roll_buffer.pop(0)
+                else:
+                    if speech_frames == 0:
+                        for pre_roll_data in pre_roll_buffer:
+                            wf.writeframes(pre_roll_data)
+                        pre_roll_buffer = []
 
-                        if not is_silence:
-                            speech_paused_frames = 0
+                    wf.writeframes(data.tobytes())
 
-            if not conversation_started:
+                    if not is_silence:
+                        speech_frames += 1
+
+            if speech_frames < MIN_SPEECH_FRAMES:
                 return None
-
-        if not conversation_started:
-            return None
 
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
@@ -684,21 +605,18 @@ class STTManager:
 
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
 
-            audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+        audio_max = np.abs(audio_data).max()
+        if audio_max < 0.1:
+            audio_data = audio_data * (0.3 / max(audio_max, 0.001))
 
-            audio_max = np.abs(audio_data).max()
-            if audio_max < 0.1:
-                audio_data = audio_data * (0.3 / max(audio_max, 0.001))
+        audio_data = np.clip(audio_data, -1.0, 1.0)
 
-            audio_data = np.clip(audio_data, -1.0, 1.0)
-
-            transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
+        transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
 
         if transcript:
-            self.interactions += 1
             formatted_result = {"text": transcript}
             if self.utterance_callback:
-                self.utterance_callback(json.dumps(formatted_result), self.interactions)
+                self.utterance_callback(json.dumps(formatted_result))
             return formatted_result
         else:
             return None
@@ -890,62 +808,87 @@ class STTManager:
         data_buffer = []
         silent_frames = 0
         detected_speech = False
+        conversation_started = False
         try:
-            self._start_stream_reader(blocksize=4000)
-            target_time = time.time() + self.STANDBY_TIMER
-            while time.time() < target_time:
-                try:
-                    data = self.audio_queue.get(timeout=1.0)
-                except queue.Empty:
-                    continue
 
-                conversation_stopped, detected_speech, silent_frames = (
-                    self.voice_activity_detection_main(
-                        data, detected_speech, silent_frames
-                    )
-                )
+            with (
+                sd.InputStream(
+                    samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+                ) as stream,
+            ):
 
-                # queue_message(f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}")
-                if detected_speech:
-                    target_time = time.time() + self.STANDBY_TIMER
+                target_time = time.time() + self.STANDBY_TIMER
+                while time.time() < target_time:
+                    data, _ = stream.read(4000)
 
-                data_buffer.append(data)
-
-                if conversation_stopped and len(data_buffer) > 0:
-                    data_arr = np.concatenate(data_buffer)
-                    audio_np = np.frombuffer(data_arr, dtype=np.int16)
-                    audio_float = audio_np.astype(np.float32) / 32768.0
-
-                    try:
-                        segments, _info = self.faster_whisper_model.transcribe(
-                            audio_float,
-                            temperature=0.0,
-                            beam_size=5,
-                            language="en",
-                            vad_filter=True,
+                    conversation_stopped, detected_speech, silent_frames = (
+                        self.voice_activity_detection_main(
+                            data, detected_speech, silent_frames
                         )
+                    )
 
-                        conversation_text = " ".join(
-                            segment.text for segment in segments
-                        ).strip()
+                    # queue_message(
+                    #     f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}"
+                    # )
+                    if detected_speech:
+                        target_time = time.time() + self.STANDBY_TIMER
+                        if not conversation_started:
+                            conversation_started = True
 
-                        # queue_message(f"### TRANSCRIBED ###: '{conversation_text}' at {time.strftime('%Y-%m-%d %H:%M:%S')}  with probability  %{_info.language_probability}")
-                        if conversation_text:
-                            formatted_result = {"text": conversation_text}
-                            if self.utterance_callback:
-                                self.utterance_callback(json.dumps(formatted_result))
-                                return formatted_result
-                    except Exception as e:
-                        queue_message(f"WARNING: Chunk transcription failed: {e}")
+                    if conversation_started:
+                        data_buffer.append(data)
+
+                    if conversation_started and conversation_stopped:
+                        data_arr = np.concatenate(data_buffer)
+                        audio_np = np.frombuffer(data_arr, dtype=np.int16)
+                        audio_float = audio_np.astype(np.float32) / 32768.0
+                        audio_data = np.clip(audio_float, -1.0, 1.0)
+
+                        if self.SAMPLE_RATE != self.DEFAULT_SAMPLE_RATE:
+                            audio_data = librosa.resample(
+                                audio_data,
+                                orig_sr=self.SAMPLE_RATE,
+                                target_sr=self.DEFAULT_SAMPLE_RATE,
+                            )
+
+                        try:
+                            segments, _ = self.faster_whisper_model.transcribe(
+                                audio_data,
+                                temperature=0.0,
+                                beam_size=5,
+                                language="en",
+                            )
+                            # queue_message(
+                            #    f"### TRANSCRIBED FINISHED ###: at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+                            # )
+                            segments = list(segments)
+                            conversation_text = " ".join(s.text for s in segments)
+                            # queue_message(
+                            #    f"### FINISHED BUILDING CONVERSATION TEXT ###: at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+                            # )
+                            if conversation_text:
+                                formatted_result = {"text": conversation_text}
+                                self.interactions += 1
+
+                                if self.utterance_callback:
+                                    dump = json.dumps(formatted_result)
+                                    self.utterance_callback(dump, self.interactions)
+                                    return formatted_result
+
+                        except Exception as e:
+                            queue_message(f"WARNING: Chunk transcription failed: {e}")
+                        finally:
+                            data_buffer = []
+                            conversation_stopped = False
+                            conversation_started = False
+                            silent_frames = 0
+                            detected_speech = False
 
         except Exception as e:
             queue_message(f"ERROR: Faster-Whisper recording failed: {e}")
             return None
         finally:
-            try:
-                self._stop_stream_reader()
-            except Exception:
-                pass
+            self.play_wav("../stt/beep_off.wav")
 
     def _transcribe_silero(self):
         """Transcribe audio using Silero STT."""
@@ -1085,6 +1028,7 @@ class STTManager:
                 # Check again if paused before transcribing
                 if not self.is_paused():
                     self._transcribe_utterance()
+
         queue_message("INFO: STT Manager stopped.")
 
     def _detect_wake_word(self) -> bool:
@@ -1377,6 +1321,7 @@ class STTManager:
                             threshold=0.5,
                             min_speech_duration_ms=100,
                             return_seconds=True,
+                            # speech_pad_ms=30,
                         )
                         or []
                     )
