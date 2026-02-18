@@ -883,12 +883,12 @@ class STTManager:
                             conversation_started = False
                             silent_frames = 0
                             detected_speech = False
-
+                            
+                # return to standby beep            
+                self.play_wav("../stt/beep_off.wav")
         except Exception as e:
             queue_message(f"ERROR: Faster-Whisper recording failed: {e}")
             return None
-        finally:
-            self.play_wav("../stt/beep_off.wav")
 
     def _transcribe_silero(self):
         """Transcribe audio using Silero STT."""
