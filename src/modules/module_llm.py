@@ -405,17 +405,19 @@ def _summarize_search_results(search_results, user_question):
 
         if "output" in result: 
             if llm_backend in ["openai"]:
-                message_item = next((item for item in output if item.get('type') == 'message'), None)
-                text = message_item['content']["text"].strip()
-                if text.startswith("{") and text.endswith("}"):
-                try:
-                    parsed = json.loads(text)
-                    text = parsed.get("reply", parsed.get("response", text))
-                except json.JSONDecodeError:
-                    pass
+                message_item = next((item for item in result["output"] if item.get('type') == 'message'), None)
+                text = None 
+                if message_item: 
+                    text = message_item['content']["text"].strip()
+                if text and text.startswith("{") and text.endswith("}"):
+                    try:
+                        parsed = json.loads(text)
+                        text = parsed.get("reply", parsed.get("response", text))
+                    except json.JSONDecodeError:
+                        pass
 
-            if text and len(text) > 10:
-                return text
+                if text and len(text) > 10:
+                    return text
 
         return None
 
