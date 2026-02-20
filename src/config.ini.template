@@ -60,8 +60,8 @@ llm_backend = openai
 # Backend for LLM: [openai, grok, tabby, ooba]
 base_url = https://api.openai.com
 # URL for the LLM backend API [OpenAI: https://api.openai.com] or [grok: https://api.x.ai]
-openai_model = gpt-5-mini
-# OpenAI model to use for LLM if backend = openai IE gpt-4o-mini / llava-phi3:3.8b-mini-q4_0 / qwen2.5:3b / gpt-5-mini
+openai_model = gpt-4o-mini
+# OpenAI model to use for LLM if backend = openai IE gpt-4o-mini / llava-phi3:3.8b-mini-q4_0 / qwen2.5:3b
 grok_model = grok-4-1-fast-non-reasoning
 # grok model to use for LLM if backend = grok-4-1-fast-non-reasoning / grok-4-1-fast-reasoning / grok-3-mini
 override_encoding_model = cl100k_base
