@@ -887,9 +887,6 @@ def raw_complete_llm(user_prompt, istext=True):
 
     try:
         response = requests.post(url, headers=headers, json=data)
-        print("Status code:", response.status_code)
-        print("Response headers:", response.headers)
-        print(f"JSON: {response.json()}")
         response.raise_for_status()
         bot_reply = _extract_text(response.json(), istext)
         return bot_reply
