@@ -118,7 +118,6 @@ def get_completion(user_prompt, interactions, istext=True):
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
         bot_reply = _extract_text(response.json(), istext)
-
         finalReply = llm_process(user_prompt, bot_reply)
         return finalReply
 
@@ -129,22 +128,22 @@ def get_completion(user_prompt, interactions, istext=True):
 
 def _prepare_request_data(llm_backend, prompt):
     if llm_backend == "openai":
-        if CONFIG["LLM"]["openai_model"] == 'gpt-5-mini':
-            url = f"{CONFIG['LLM']['base_url']}/v1/responses"
-            data = {"model":"gpt-5-mini","input":[{"role":"developer","content":[{"type":"input_text","text":"Hello World"}]},{"role":"user","content":[{"type":"input_text","text":"Hello World I am Alex"}]}],"tools":[],"text":{"format":{"type":"text"},"verbosity":"medium"},"reasoning":{"effort":"medium"},"include":["reasoning.encrypted_content","web_search_call.action.sources"]}
-        else:
-            url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
-            data = {
-                "model": CONFIG["LLM"]["openai_model"],
-                "messages": [
-                    {"role": "system", "content": CONFIG["LLM"]["systemprompt"]},
-                    {"role": "user", "content": prompt},
-                ],
-                "max_tokens": CONFIG["LLM"]["max_tokens"],
-                "temperature": CONFIG["LLM"]["temperature"],
-                "top_p": CONFIG["LLM"]["top_p"],
-                "response_format": {"type": "json_object"},
-            }
+    #    if CONFIG["LLM"]["openai_model"] == 'gpt-5-mini':
+    #        url = f"{CONFIG['LLM']['base_url']}/v1/responses"
+    #        data = {"model":"gpt-5-mini","input":[{"role":"developer","content":[{"type":"input_text","text":"Hello World"}]},{"role":"user","content":[{"type":"input_text","text":"Hello World I am Alex"}]}],"tools":[],"text":{"format":{"type":"text"},"verbosity":"medium"},"reasoning":{"effort":"medium"},"include":["reasoning.encrypted_content","web_search_call.action.sources"]}
+    #    else:
+        url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
+        data = {
+            "model": CONFIG["LLM"]["openai_model"],
+            "messages": [
+                {"role": "system", "content": CONFIG["LLM"]["systemprompt"]},
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": CONFIG["LLM"]["max_tokens"],
+            "temperature": CONFIG["LLM"]["temperature"],
+            "top_p": CONFIG["LLM"]["top_p"],
+            "response_format": {"type": "json_object"},
+        }
     elif llm_backend == "grok":
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
         data = {
