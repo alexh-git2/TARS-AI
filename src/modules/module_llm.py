@@ -865,6 +865,14 @@ def execute_function_call(func_call, bot_response, user_input):
 
                 threading.Thread(target=shutdown_after_tts, daemon=False).start()
 
+            elif action == 'poweron_coffeebar':
+                bot_response["reply"] = "Powering on coffee bar lights"
+            elif action == 'poweroff_coffeebar':
+                bot_response["reply"] = "Turning off coffee bar lights"
+            elif action == 'poweron_espresso_machine':
+                bot_response["reply"] = "Brew something good today!"
+            elif action == 'poweroff_espresso_machine':
+                bot_response["reply"] = "Turning off espresso machine"
             else:
                 bot_response["reply"] = "I didn't understand that system command."
 
