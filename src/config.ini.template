@@ -280,8 +280,8 @@ auto_shutdown = True
 
 [KASA]
 # this section is used to implmenent KASA smart switch options
-espresso_machine = "Espresso Machine"
-coffee_bar_lights = "Coffee Bar Lights"
+espresso_machine = Espresso Machine
+coffee_bar_lights = Coffee Bar Lights
 
 [MISC]
 ventilate = False
