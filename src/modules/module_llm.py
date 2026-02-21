@@ -27,7 +27,7 @@ import asyncio
 from modules.module_config import load_config, get_capabilities
 from modules.module_prompt import build_prompt
 from modules.module_engine import execute_movement
-
+from modules.module_kasa import turn_on_coffeebar, turn_off_coffeebar, turn_on_espresso_machine, turn_off_espresso_machine
 from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
@@ -799,6 +799,30 @@ def execute_function_call(func_call, bot_response, user_input):
 
             threading.Thread(target=launch_after_tts, daemon=False).start()
 
+        elif function_name == 'poweron_coffeebar':
+            bot_response["reply"] = bot_response.get(
+                "reply", "Powering on coffee bar lights"
+            )                     
+            turn_on_coffeebar()
+                
+        elif function_name == 'poweroff_coffeebar':
+            bot_response["reply"] = bot_response.get(
+                "reply", "Turning off coffee bar lights"
+                )
+            turn_off_coffeebar()
+                
+        elif function_name == 'poweron_espresso_machine':
+            bot_response["reply"] = bot_response.get(
+                "reply", "Brew something good today!"
+            )
+            turn_on_espresso_machine()
+
+        elif function_name == 'poweroff_espresso_machine':
+            bot_response["reply"] = bot_response.get(
+                "reply", "Turning off espresso machine"
+            )
+            turn_off_espresso_machine()
+                
         elif function_name == "system_control":
             action = parameters.get("action", "")
             if action == "exit":
@@ -864,23 +888,6 @@ def execute_function_call(func_call, bot_response, user_input):
                         os._exit(0)
 
                 threading.Thread(target=shutdown_after_tts, daemon=False).start()
-
-            elif function_name == 'poweron_coffeebar':
-                bot_response["reply"] = bot_response.get(
-                    "reply", "Powering on coffee bar lights"
-                )             
-            elif function_name == 'poweroff_coffeebar':
-                bot_response["reply"] = bot_response.get(
-                    "reply", "Turning off coffee bar lights"
-                )
-            elif function_name == 'poweron_espresso_machine':
-                 bot_response["reply"] = bot_response.get(
-                    "reply", "Brew something good today!"
-                )   
-            elif function_name == 'poweroff_espresso_machine':
-                bot_response["reply"] = bot_response.get(
-                    "reply", "Turning off espresso machine"
-                )           
             else:
                 bot_response["reply"] = "I didn't understand that system command."
 
