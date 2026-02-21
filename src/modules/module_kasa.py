@@ -15,16 +15,34 @@ CONFIG = load_config()
 _coffee_bar_lights: Device
 _espresso_machine: Device
 
+_retry_count = 3
+_delay = 0.5
+
 async def _turn_on(plug: Device):
-    if plug:
-        await plug.turn_on()
-        await plug.update()
-        
+    for attempt in range(1, _retry_count + 1):
+        try:
+            if plug:
+                await plug.turn_on()
+                await plug.update()
+            return
+        except:
+            # print(f"[Attempt {attempt}] Communication error: {e}")
+            if attempt == retries:
+                raise
+            await asyncio.sleep(_delay)
     
 async def _turn_off(plug: Device):
-    if plug:
-        await plug.turn_off()
-        await plug.update()        
+    for attempt in range(1, _retry_count + 1):
+        try:
+            if plug:
+                await plug.turn_off()
+                await plug.update()
+            return
+        except:
+            # print(f"[Attempt {attempt}] Communication error: {e}")
+            if attempt == retries:
+                raise
+            await asyncio.sleep(_delay)  
     
 def turn_on_coffeebar():
     asyncio.run(_turn_on(_coffee_bar_lights))
@@ -47,11 +65,14 @@ async def main():
     for ip, dev in devices.items():
         await dev.update()  # get full info if you want alias, state, etc.
         #print(f"{ip} -> ({dev.model}), On: {dev.is_on} Alias: {dev.alias}")
+
         if dev.alias.lower().strip() == CONFIG["KASA"]["coffee_bar_lights"].lower().strip():
             _coffee_bar_lights = dev
 
         if dev.alias.lower().strip() == CONFIG["KASA"]["espresso_machine"].lower().strip():
-            _espresso_machine = dev    
+            _espresso_machine = dev
+            
+        asyncio.sleep(_delay)
             
         
 def start_kasa():
