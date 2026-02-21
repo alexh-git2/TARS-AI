@@ -19,8 +19,8 @@ async def _turn_on(plug: Device):
     if plug:
         await plug.update()
         await plug.turn_on()
-
-
+        
+    
 async def _turn_off(plug: Device):
     if plug:
         await plug.update()
@@ -50,7 +50,6 @@ async def main():
     for ip, dev in devices.items():
         await dev.update()  # get full info if you want alias, state, etc.
         # print(f"{ip} -> ({dev.model}), On: {dev.is_on} Alias: {dev.alias}")
-        
         if dev.alias.lower().strip() == CONFIG["KASA"]["coffee_bar_lights"]:
             _coffee_bar_lights = dev
 

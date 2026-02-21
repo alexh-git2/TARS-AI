@@ -611,7 +611,7 @@ def load_config():
         },
         "KASA": {
             "espresso_machine": config.get("KASA", "espresso_machine", fallback=None),
-            "coffee_bar_lights": config.get("KASA", "coffee_bar_lights", fallback="None")
+            "coffee_bar_lights": config.get("KASA", "coffee_bar_lights", fallback=None)
         },
         "MISC": {
             "ventilate": config.getboolean("MISC", "ventilate", fallback=False),
