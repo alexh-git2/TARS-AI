@@ -2,6 +2,7 @@ import sys
 import time
 import threading
 import queue
+from datetime import datetime
 
 # Queue for handling message processing
 message_queue = queue.Queue()
@@ -61,6 +62,11 @@ def queue_message(message, stream=False):
     """
     if message and message.strip():
         message_queue.put((message.strip(), stream))  # 🔹 No lock needed here
+
+def queue_debug_message(message, stream=False): 
+    if message and message.strip():
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"[{timestamp}] {message.strip()}"
 
 def stop_message_processing():
     """ Stops the message processing thread safely. """
