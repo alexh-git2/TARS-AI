@@ -17,44 +17,41 @@ _espresso_machine: Device
 
 async def _turn_on(plug: Device):
     if plug:
-        await plug.update()
         await plug.turn_on()
+        await plug.update()
         
     
 async def _turn_off(plug: Device):
     if plug:
-        await plug.update()
         await plug.turn_off()
+        await plug.update()        
     
 def turn_on_coffeebar():
-    if _coffee_bar_lights:
-        asyncio.run(_coffee_bar_lights.turn_on())
-       
+    asyncio.run(_turn_on(_coffee_bar_lights))
+
 def turn_off_coffeebar():
-    if _coffee_bar_lights:
-        asyncio.run(_coffee_bar_lights.turn_off())
+    asyncio.run(_turn_off(_coffee_bar_lights)) 
 
 def turn_on_espresso_machine():
-    if _espresso_machine:
-        asyncio.run(_espresso_machine.turn_on())
+    asyncio.run(_turn_on(_espresso_machine))
 
 def turn_off_espresso_machine():
-    if _espresso_machine:
-        asyncio.run(_espresso_machine.turn_off())
+    asyncio.run(_turn_off(_espresso_machine))
                       
 async def main():    
     queue_message("[KASA] initializing...")
     devices = await Discover.discover()
     global _coffee_bar_lights
     global _espresso_machine
+    
     for ip, dev in devices.items():
         await dev.update()  # get full info if you want alias, state, etc.
-        # print(f"{ip} -> ({dev.model}), On: {dev.is_on} Alias: {dev.alias}")
-        if dev.alias.lower().strip() == CONFIG["KASA"]["coffee_bar_lights"]:
+        #print(f"{ip} -> ({dev.model}), On: {dev.is_on} Alias: {dev.alias}")
+        if dev.alias.lower().strip() == CONFIG["KASA"]["coffee_bar_lights"].lower().strip():
             _coffee_bar_lights = dev
 
-        if dev.alias.lower().strip() == CONFIG["KASA"]["espresso_machine"]:
-            _espresso_machine = dev
+        if dev.alias.lower().strip() == CONFIG["KASA"]["espresso_machine"].lower().strip():
+            _espresso_machine = dev    
             
         
 def start_kasa():
