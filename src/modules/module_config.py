@@ -609,6 +609,10 @@ def load_config():
             ),
             "auto_shutdown": config.getboolean("BATTERY", "auto_shutdown"),
         },
+        "KASA": {
+            "espresso_machine": config.get("KASA", "espresso_machine", fallback=None),
+            "coffee_bar_lights": config.get("KASA", "coffee_bar_lights", fallback="None")
+        },
         "MISC": {
             "ventilate": config.getboolean("MISC", "ventilate", fallback=False),
         },

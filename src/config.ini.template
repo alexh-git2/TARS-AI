@@ -278,6 +278,11 @@ battery_cutoff_voltage = 10
 auto_shutdown = True
 # Protects the Raspberry pi and battery, when it reaches 0% the raspberry pi will shutdown by itself.
 
+[KASA]
+# this section is used to implmenent KASA smart switch options
+espresso_machine = "Espresso Machine"
+coffee_bar_lights = "Coffee Bar Lights"
+
 [MISC]
 ventilate = False
 # Enable to have the robot automatically take a pose that allows for better airflow

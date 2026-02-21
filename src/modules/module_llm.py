@@ -802,7 +802,7 @@ def execute_function_call(func_call, bot_response, user_input):
         elif function_name == 'poweron_coffeebar':
             bot_response["reply"] = bot_response.get(
                 "reply", "Powering on coffee bar lights"
-            )                     
+            )            
             turn_on_coffeebar()
                 
         elif function_name == 'poweroff_coffeebar':
