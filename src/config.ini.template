@@ -281,7 +281,9 @@ auto_shutdown = True
 [KASA]
 # this section is used to implmenent KASA smart switch options
 espresso_machine = Espresso Machine
+# alias name of the smart plug, used for fetching the device for use
 coffee_bar_lights = Coffee Bar Lights
+# alias name of the smart plug, used for fetching the device for use
 
 [MISC]
 ventilate = False
