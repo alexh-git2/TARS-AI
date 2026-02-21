@@ -25,7 +25,7 @@ import soundfile as sf
 import requests
 import queue
 
-from modules.module_messageQue import queue_message
+from modules.module_messageQue import queue_message, queue_debug_message
 from modules.module_config import load_config, get_capabilities
 
 CONFIG = load_config()
@@ -827,9 +827,9 @@ class STTManager:
                         )
                     )
 
-                    # queue_message(
+                    #queue_debug_message(
                     #     f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}"
-                    # )
+                    #)
                     if detected_speech:
                         target_time = time.time() + self.STANDBY_TIMER
                         if not conversation_started:
@@ -858,14 +858,14 @@ class STTManager:
                                 beam_size=5,
                                 language="en",
                             )
-                            # queue_message(
-                            #    f"### TRANSCRIBED FINISHED ###: at {time.strftime('%Y-%m-%d %H:%M:%S')}"
-                            # )
+                            #queue_debug_message(
+                            #    f"TRANSCRIBED FINISHED"
+                            #)
                             segments = list(segments)
                             conversation_text = " ".join(s.text for s in segments)
-                            # queue_message(
-                            #    f"### FINISHED BUILDING CONVERSATION TEXT ###: at {time.strftime('%Y-%m-%d %H:%M:%S')}"
-                            # )
+                            #queue_debug_message(
+                            #    f"FINISHED BUILDING CONVERSATION"
+                            #)
                             if conversation_text:
                                 formatted_result = {"text": conversation_text}
                                 self.interactions += 1
@@ -876,7 +876,7 @@ class STTManager:
                                     return formatted_result
 
                         except Exception as e:
-                            queue_message(f"WARNING: Chunk transcription failed: {e}")
+                            queue_debug_message(f"WARNING: Chunk transcription failed: {e}")
                         finally:
                             data_buffer = []
                             conversation_stopped = False
@@ -887,7 +887,7 @@ class STTManager:
                 # return to standby beep            
                 self.play_wav("../stt/beep_off.wav")
         except Exception as e:
-            queue_message(f"ERROR: Faster-Whisper recording failed: {e}")
+            queue_debug_message(f"ERROR: Faster-Whisper recording failed: {e}")
             return None
 
     def _transcribe_silero(self):
