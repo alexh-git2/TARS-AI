@@ -27,7 +27,7 @@ async def _turn_on(plug: Device):
             return
         except:
             # print(f"[Attempt {attempt}] Communication error: {e}")
-            if attempt == retries:
+            if attempt == _retry_count:
                 raise
             await asyncio.sleep(_delay)
     
@@ -40,9 +40,9 @@ async def _turn_off(plug: Device):
             return
         except:
             # print(f"[Attempt {attempt}] Communication error: {e}")
-            if attempt == retries:
+            if attempt == _retry_count:
                 raise
-            await asyncio.sleep(_delay)  
+            await asyncio.sleep(_delay)
     
 def turn_on_coffeebar():
     asyncio.run(_turn_on(_coffee_bar_lights))
@@ -72,7 +72,7 @@ async def main():
         if dev.alias.lower().strip() == CONFIG["KASA"]["espresso_machine"].lower().strip():
             _espresso_machine = dev
             
-        asyncio.sleep(_delay)
+        await asyncio.sleep(_delay)
             
         
 def start_kasa():
