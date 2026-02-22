@@ -621,7 +621,7 @@ class STTManager:
         else:
             return None
 
-    def _transcribe_with_vosk(self):
+    def _transcribe_with_vosk_legacy(self):
         """Transcribe audio using the local Vosk model."""
         if KaldiRecognizer is None or self.vosk_model is None:
             queue_message("ERROR: Vosk not available for transcription")
@@ -662,6 +662,61 @@ class STTManager:
                     if self.utterance_callback:
                         self.utterance_callback(result)
                     return result
+        return None
+
+    def _transcribe_with_vosk(self):
+        """Transcribe audio using the local Vosk model."""
+        if KaldiRecognizer is None or self.vosk_model is None:
+            queue_message("ERROR: Vosk not available for transcription")
+            return None
+
+        recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
+        recognizer.SetWords(False)
+        recognizer.SetPartialWords(False)
+
+        detected_speech = False
+        silent_frames = 0
+        target_time = time.time() + self.STANDBY_TIMER
+        conversation_started = False
+        conversation_stopped = False
+        combined_text = ""
+
+        with sd.InputStream(
+            samplerate=self.SAMPLE_RATE,
+            channels=1,
+            dtype="int16",
+            blocksize=4000,
+            latency="high",
+        ) as stream:
+            while time.time() < target_time:
+                data, _ = stream.read(4000)
+                conversation_stopped, detected_speech, silent_frames = (                    
+                    self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                )  # force RMS as VAD doesnt like vosk
+                #print(
+                #    f"conversation_started={conversation_started} conversation_stopped={conversation_stopped} detected_speech={detected_speech} silent_frames={silent_frames}"
+                #)
+
+                if detected_speech:
+                    target_time = time.time() + self.STANDBY_TIMER
+                    if not conversation_started:
+                        conversation_started = True
+
+                data = self.amplify_audio(data)  # amp the sound
+
+                if recognizer.AcceptWaveform(data.tobytes()):
+                    result = recognizer.Result()           
+                    if result:
+                        result_json = json.loads(result)
+                        text = result_json.get("text", "")
+                        if text:
+                            combined_text += " " + text                    
+
+                if self.utterance_callback and conversation_started and conversation_stopped and combined_text:
+                    formatted_result = {"text": combined_text.strip()}
+                    self.utterance_callback(result)
+                    return formatted_result
+
         return None
 
     def _transcribe_with_openAi(self):
@@ -827,9 +882,9 @@ class STTManager:
                         )
                     )
 
-                    #queue_debug_message(
+                    # queue_debug_message(
                     #     f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}"
-                    #)
+                    # )
                     if detected_speech:
                         target_time = time.time() + self.STANDBY_TIMER
                         if not conversation_started:
@@ -858,14 +913,14 @@ class STTManager:
                                 beam_size=5,
                                 language="en",
                             )
-                            #queue_debug_message(
+                            # queue_debug_message(
                             #    f"TRANSCRIBED FINISHED"
-                            #)
+                            # )
                             segments = list(segments)
                             conversation_text = " ".join(s.text for s in segments)
-                            #queue_debug_message(
+                            # queue_debug_message(
                             #    f"FINISHED BUILDING CONVERSATION"
-                            #)
+                            # )
                             if conversation_text:
                                 formatted_result = {"text": conversation_text}
                                 self.interactions += 1
@@ -876,15 +931,17 @@ class STTManager:
                                     return formatted_result
 
                         except Exception as e:
-                            queue_debug_message(f"WARNING: Chunk transcription failed: {e}")
+                            queue_debug_message(
+                                f"WARNING: Chunk transcription failed: {e}"
+                            )
                         finally:
                             data_buffer = []
                             conversation_stopped = False
                             conversation_started = False
                             silent_frames = 0
                             detected_speech = False
-                            
-                # return to standby beep            
+
+                # return to standby beep
                 self.play_wav("../stt/beep_off.wav")
         except Exception as e:
             queue_debug_message(f"ERROR: Faster-Whisper recording failed: {e}")
