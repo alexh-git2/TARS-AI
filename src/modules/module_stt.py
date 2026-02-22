@@ -692,10 +692,7 @@ class STTManager:
                 data, _ = stream.read(4000)
                 conversation_stopped, detected_speech, silent_frames = (                    
                     self.voice_activity_detection_main(data, detected_speech, silent_frames)
-                )  # force RMS as VAD doesnt like vosk
-                #print(
-                #    f"conversation_started={conversation_started} conversation_stopped={conversation_stopped} detected_speech={detected_speech} silent_frames={silent_frames}"
-                #)
+                )
 
                 if detected_speech:
                     target_time = time.time() + self.STANDBY_TIMER
