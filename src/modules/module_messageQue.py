@@ -8,8 +8,9 @@ from datetime import datetime
 message_queue = queue.Queue()
 output_lock = threading.Lock()  # 🔹 Single lock for ALL stdout operations
 
+
 def process_message_queue():
-    """ Continuously process the message queue in order. """
+    """Continuously process the message queue in order."""
     while True:
         item = message_queue.get()
 
@@ -25,20 +26,25 @@ def process_message_queue():
 
         if stream_text:
             # 🔹 Run text streaming in a **separate thread** to avoid blocking
-            threading.Thread(target=stream_text_blocking, args=(message,), daemon=True).start()
+            threading.Thread(
+                target=stream_text_blocking, args=(message,), daemon=True
+            ).start()
         else:
             with output_lock:  # 🔹 Lock only while printing
                 print(message, flush=True)
 
         message_queue.task_done()
 
+
 def stream_text_blocking(text, delay=0.03):
-    """ Streams text character-by-character in a non-blocking manner. """
-    
+    """Streams text character-by-character in a non-blocking manner."""
+
     def _stream():
         with output_lock:  # 🔹 Ensures no other process writes during streaming
             sys.stdout.flush()
-            time.sleep(0.4)  # 🔹 Small delay to ensure terminal processes it this will not block the main program
+            time.sleep(
+                0.4
+            )  # 🔹 Small delay to ensure terminal processes it this will not block the main program
 
             for char in text:
                 sys.stdout.write(char)
@@ -50,6 +56,7 @@ def stream_text_blocking(text, delay=0.03):
 
     # Run the streaming in a separate thread to prevent blocking
     threading.Thread(target=_stream, daemon=True).start()
+
 
 def queue_message(message, stream=False):
     """
@@ -63,15 +70,19 @@ def queue_message(message, stream=False):
     if message and message.strip():
         message_queue.put((message.strip(), stream))  # 🔹 No lock needed here
 
-def queue_debug_message(message, stream=False): 
+
+def queue_debug_message(message, stream=False):
     if message and message.strip():
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message = f"[{timestamp}] {message.strip()}"
+        message_queue.put((message, stream))
+
 
 def stop_message_processing():
-    """ Stops the message processing thread safely. """
+    """Stops the message processing thread safely."""
     message_queue.put(None)  # Stop signal
     message_thread.join()
+
 
 # Start the message processing thread
 message_thread = threading.Thread(target=process_message_queue, daemon=True)

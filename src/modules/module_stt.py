@@ -777,6 +777,7 @@ class STTManager:
                 data = self.amplify_audio(data)  # amp the sound
 
                 if recognizer.AcceptWaveform(data.tobytes()):
+                    # queue_debug_message("BEGIN TRANSCRIPTION")
                     result = recognizer.Result()
                     if result:
                         result_json = json.loads(result)
@@ -790,6 +791,7 @@ class STTManager:
                     and conversation_stopped
                     and combined_text
                 ):
+                    # queue_debug_message("END TRANSCRIPTION")
                     formatted_result = {"text": combined_text.strip()}
                     self.utterance_callback(result)
                     return formatted_result
@@ -971,6 +973,7 @@ class STTManager:
                         data_buffer.append(data)
 
                     if conversation_started and conversation_stopped:
+                        # queue_debug_message("BEGIN TRANSCRIPTION")
                         data_arr = np.concatenate(data_buffer)
                         audio_np = np.frombuffer(data_arr, dtype=np.int16)
                         audio_float = audio_np.astype(np.float32) / 32768.0
@@ -987,17 +990,13 @@ class STTManager:
                             segments, _ = self.faster_whisper_model.transcribe(
                                 audio_data,
                                 temperature=0.0,
-                                beam_size=5,
+                                beam_size=1,
                                 language="en",
+                                vad_filter=False,
                             )
-                            # queue_debug_message(
-                            #    f"TRANSCRIBED FINISHED"
-                            # )
-                            segments = list(segments)
+                            # queue_debug_message("TRANSCRIBED FINISHED")
                             conversation_text = " ".join(s.text for s in segments)
-                            # queue_debug_message(
-                            #    f"FINISHED BUILDING CONVERSATION"
-                            # )
+                            # queue_debug_message("FINISHED BUILDING CONVERSATION")
                             if conversation_text:
                                 formatted_result = {"text": conversation_text}
                                 self.interactions += 1
