@@ -626,11 +626,9 @@ class STTManager:
         audio_buffer = BytesIO()
         detected_speech = False
         silent_frames = 0
-        speech_frames = 0
         pre_roll_buffer = []
         PRE_ROLL_FRAMES = 10
-        MIN_SPEECH_FRAMES = 5
-        MAX_SILENT_FRAMES = 20
+        conversation_started = False
 
         with (
             sd.InputStream(
@@ -643,10 +641,8 @@ class STTManager:
             wf.setframerate(self.SAMPLE_RATE)
 
             start_time = time.time()
-            frame_idx = 0
-            while (
-                not detected_speech and time.time() - start_time <= self.STANDBY_TIMER
-            ):
+
+            while time.time() - start_time <= self.STANDBY_TIMER:
                 data, _ = stream.read(4000)
 
                 is_silence, detected_speech, silent_frames = (
@@ -654,61 +650,49 @@ class STTManager:
                         data, detected_speech, silent_frames
                     )
                 )
-                silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
-
-                # Add the same early exit check as other functions
-                if is_silence:
-                    if not detected_speech:
-                        return None  # Exit early if silence detected before any speech
-                    # If speech was detected, check if we should stop recording
-                    if (
-                        speech_frames >= MIN_SPEECH_FRAMES
-                        and silent_frames >= MAX_SILENT_FRAMES
-                    ):
-                        print()
-                        break
 
                 if not detected_speech:
                     pre_roll_buffer.append(data.tobytes())
                     if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
                         pre_roll_buffer.pop(0)
                 else:
-                    if speech_frames == 0:
+                    if conversation_started:
+                        start_time = time.time()
+
+                    if not conversation_started:
+                        conversation_started = True
                         for pre_roll_data in pre_roll_buffer:
                             wf.writeframes(pre_roll_data)
                         pre_roll_buffer = []
 
                     wf.writeframes(data.tobytes())
 
-                    if not is_silence:
-                        speech_frames += 1
+                if conversation_started and is_silence:
+                    pre_roll_buffer = []
+                    detected_speech = False
+                    conversation_started = False
 
-                frame_idx += 1
+                    audio_buffer.seek(0)
+                    if audio_buffer.getbuffer().nbytes == 0:
+                        return None
 
-            if speech_frames < MIN_SPEECH_FRAMES:
-                return None
+                    audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
 
-        audio_buffer.seek(0)
-        if audio_buffer.getbuffer().nbytes == 0:
-            return None
+                    audio_max = np.abs(audio_data).max()
+                    if audio_max < 0.1:
+                        audio_data = audio_data * (0.3 / max(audio_max, 0.001))
 
-        audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+                    audio_data = np.clip(audio_data, -1.0, 1.0)
 
-        audio_max = np.abs(audio_data).max()
-        if audio_max < 0.1:
-            audio_data = audio_data * (0.3 / max(audio_max, 0.001))
+                    transcript = self.fastrtc_model.stt(
+                        (self.SAMPLE_RATE, audio_data)
+                    ).strip()
 
-        audio_data = np.clip(audio_data, -1.0, 1.0)
-
-        transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
-
-        if transcript:
-            formatted_result = {"text": transcript}
-            if self.utterance_callback:
-                self.utterance_callback(json.dumps(formatted_result))
-            return formatted_result
-        else:
-            return None
+                    if transcript:
+                        formatted_result = {"text": transcript}
+                        if self.utterance_callback:
+                            self.utterance_callback(json.dumps(formatted_result))
+                        return formatted_result
 
     def _transcribe_with_vosk_legacy(self):
         """Transcribe audio using the local Vosk model."""
