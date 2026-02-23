@@ -538,7 +538,7 @@ class STTManager:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
 
-    def _transcribe_with_fastrtc(self):
+    def _transcribe_with_fastrtc_legacy(self):
         """Transcribe audio using FastRTC STT with improved speech detection."""
         audio_buffer = BytesIO()
         detected_speech = False
@@ -595,6 +595,95 @@ class STTManager:
 
                     if not is_silence:
                         speech_frames += 1
+
+            if speech_frames < MIN_SPEECH_FRAMES:
+                return None
+
+        audio_buffer.seek(0)
+        if audio_buffer.getbuffer().nbytes == 0:
+            return None
+
+        audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+
+        audio_max = np.abs(audio_data).max()
+        if audio_max < 0.1:
+            audio_data = audio_data * (0.3 / max(audio_max, 0.001))
+
+        audio_data = np.clip(audio_data, -1.0, 1.0)
+
+        transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
+
+        if transcript:
+            formatted_result = {"text": transcript}
+            if self.utterance_callback:
+                self.utterance_callback(json.dumps(formatted_result))
+            return formatted_result
+        else:
+            return None
+
+    def _transcribe_with_fastrtc(self):
+        """Transcribe audio using FastRTC STT with improved speech detection."""
+        audio_buffer = BytesIO()
+        detected_speech = False
+        silent_frames = 0
+        speech_frames = 0
+        pre_roll_buffer = []
+        PRE_ROLL_FRAMES = 10
+        MIN_SPEECH_FRAMES = 5
+        MAX_SILENT_FRAMES = 20
+
+        with (
+            sd.InputStream(
+                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+            ) as stream,
+            wave.open(audio_buffer, "wb") as wf,
+        ):
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(self.SAMPLE_RATE)
+
+            start_time = time.time()
+            frame_idx = 0
+            while (
+                not detected_speech and time.time() - start_time <= self.STANDBY_TIMER
+            ):
+                data, _ = stream.read(4000)
+
+                is_silence, detected_speech, silent_frames = (
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
+                    )
+                )
+                silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
+
+                # Add the same early exit check as other functions
+                if is_silence:
+                    if not detected_speech:
+                        return None  # Exit early if silence detected before any speech
+                    # If speech was detected, check if we should stop recording
+                    if (
+                        speech_frames >= MIN_SPEECH_FRAMES
+                        and silent_frames >= MAX_SILENT_FRAMES
+                    ):
+                        print()
+                        break
+
+                if not detected_speech:
+                    pre_roll_buffer.append(data.tobytes())
+                    if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
+                        pre_roll_buffer.pop(0)
+                else:
+                    if speech_frames == 0:
+                        for pre_roll_data in pre_roll_buffer:
+                            wf.writeframes(pre_roll_data)
+                        pre_roll_buffer = []
+
+                    wf.writeframes(data.tobytes())
+
+                    if not is_silence:
+                        speech_frames += 1
+
+                frame_idx += 1
 
             if speech_frames < MIN_SPEECH_FRAMES:
                 return None
@@ -690,8 +779,10 @@ class STTManager:
         ) as stream:
             while time.time() < target_time:
                 data, _ = stream.read(4000)
-                conversation_stopped, detected_speech, silent_frames = (                    
-                    self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                conversation_stopped, detected_speech, silent_frames = (
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
+                    )
                 )
 
                 if detected_speech:
@@ -702,14 +793,19 @@ class STTManager:
                 data = self.amplify_audio(data)  # amp the sound
 
                 if recognizer.AcceptWaveform(data.tobytes()):
-                    result = recognizer.Result()           
+                    result = recognizer.Result()
                     if result:
                         result_json = json.loads(result)
                         text = result_json.get("text", "")
                         if text:
-                            combined_text += " " + text                    
+                            combined_text += " " + text
 
-                if self.utterance_callback and conversation_started and conversation_stopped and combined_text:
+                if (
+                    self.utterance_callback
+                    and conversation_started
+                    and conversation_stopped
+                    and combined_text
+                ):
                     formatted_result = {"text": combined_text.strip()}
                     self.utterance_callback(result)
                     return formatted_result
@@ -862,13 +958,11 @@ class STTManager:
         detected_speech = False
         conversation_started = False
         try:
-
             with (
                 sd.InputStream(
                     samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
                 ) as stream,
             ):
-
                 target_time = time.time() + self.STANDBY_TIMER
                 while time.time() < target_time:
                     data, _ = stream.read(4000)
