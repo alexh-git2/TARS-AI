@@ -962,7 +962,7 @@ class STTManager:
                     )
 
                     # queue_debug_message(
-                    #     f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}"
+                    #    f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}"
                     # )
                     if detected_speech:
                         target_time = time.time() + self.STANDBY_TIMER
