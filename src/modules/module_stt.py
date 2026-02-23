@@ -794,6 +794,8 @@ class STTManager:
                     self.utterance_callback(result)
                     return formatted_result
 
+        # return to standby beep
+        self.play_wav("../stt/beep_off.wav")
         return None
 
     def _transcribe_with_openAi(self):
