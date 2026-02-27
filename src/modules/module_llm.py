@@ -136,7 +136,7 @@ def _prepare_request_data(llm_backend, prompt):
                     {"role": "user", "content": prompt},
                 ],
                 "tools": [],
-                "max_output_tokens": CONFIG["LLM"]["max_tokens"],
+                # "max_output_tokens": CONFIG["LLM"]["max_tokens"],
             }
         else:
             url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
@@ -209,6 +209,7 @@ def _extract_text(response_json, istext):
                     if content:
                         return content[0]["text"]
 
+        print(f"LLM response: {response_json}")
         raise KeyError("Invalid response format: 'choices' or 'output' key not found.")
     except (KeyError, IndexError, TypeError) as error:
         return f"Text extraction failed: {str(error)}"
