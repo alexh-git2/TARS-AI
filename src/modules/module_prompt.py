@@ -537,6 +537,23 @@ Example 28 - Shutdown device:
 User: "Shut down the raspberry pi"
 Response: {{"question": "Shut down the raspberry pi", "reply": "Powering off now. Goodbye!", "function_calls": [{{"function": "system_control", "parameters": {{"action": "shutdown"}}}}], "new_memories": []}}
 
+Example 29 - Kasa Smart Switch Espresso (on):
+User: "Turn on espresso machine"
+Response: {{"question": "Turn on espresso machine", "reply": "Let's have some coffee!", "function_calls": [{{"function": "poweron_espresso_machine", "parameters": {{}}}}], "new_memories": []}}
+
+Example 30 - Kasa Smart Switch Espresso (off):
+User: "Turn off espresso machine"
+Response: {{"question": "Turn off espresso machine", "reply": "Turning off your espresso machine", "function_calls": [{{"function": "poweroff_espresso_machine", "parameters": {{}}}}], "new_memories": []}}
+
+Example 31 - Kasa Smart Switch Coffeebar Lights (on):
+User: "Turn on coffee bar lights"
+Response: {{"question": "Turn on coffee bar lights", "reply": "Ready for some coffee?", "function_calls": [{{"function": "poweron_coffeebar", "parameters": {{}}}}], "new_memories": []}}
+
+Example 32 - Kasa Smart Switch Coffeebar Lights (off):
+User: "Turn off coffee bar lights"
+Response: {{"question": "Turn off coffee bar lights", "reply": "Turning off coffee bar lights", "function_calls": [{{"function": "poweroff_coffeebar", "parameters": {{}}}}], "new_memories": []}}
+
+
 === CRITICAL REMINDERS ===
 1. SOUND HUMAN. Talk like a real person. No dramatic flair, no forced metaphors, no theatrical language.
 2. ANSWER FIRST, PERSONALITY SECOND. Give the actual answer, then add flavor. Never replace substance with style.

@@ -27,7 +27,6 @@ import asyncio
 from modules.module_config import load_config, get_capabilities
 from modules.module_prompt import build_prompt
 from modules.module_engine import execute_movement
-
 from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
@@ -118,7 +117,6 @@ def get_completion(user_prompt, interactions, istext=True):
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
         bot_reply = _extract_text(response.json(), istext)
-
         finalReply = llm_process(user_prompt, bot_reply)
         return finalReply
 
@@ -128,8 +126,11 @@ def get_completion(user_prompt, interactions, istext=True):
 
 
 def _prepare_request_data(llm_backend, prompt):
-
     if llm_backend == "openai":
+    #    if CONFIG["LLM"]["openai_model"] == 'gpt-5-mini':
+    #        url = f"{CONFIG['LLM']['base_url']}/v1/responses"
+    #        data = {"model":"gpt-5-mini","input":[{"role":"developer","content":[{"type":"input_text","text":"Hello World"}]},{"role":"user","content":[{"type":"input_text","text":"Hello World I am Alex"}]}],"tools":[],"text":{"format":{"type":"text"},"verbosity":"medium"},"reasoning":{"effort":"medium"},"include":["reasoning.encrypted_content","web_search_call.action.sources"]}
+    #    else:
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
         data = {
             "model": CONFIG["LLM"]["openai_model"],
@@ -399,6 +400,22 @@ def _summarize_search_results(search_results, user_question):
 
             if text and len(text) > 10:
                 return text
+ 
+        if "output" in result: 
+            if llm_backend in ["openai"]:
+                message_item = next((item for item in result["output"] if item.get('type') == 'message'), None)
+                text = None 
+                if message_item: 
+                    text = message_item['content']["text"].strip()
+                if text and text.startswith("{") and text.endswith("}"):
+                    try:
+                        parsed = json.loads(text)
+                        text = parsed.get("reply", parsed.get("response", text))
+                    except json.JSONDecodeError:
+                        pass
+
+                if text and len(text) > 10:
+                    return text
 
         return None
 
@@ -781,6 +798,34 @@ def execute_function_call(func_call, bot_response, user_input):
 
             threading.Thread(target=launch_after_tts, daemon=False).start()
 
+        elif function_name == 'poweron_coffeebar':
+            from modules.module_kasa import turn_on_coffeebar
+            bot_response["reply"] = bot_response.get(
+                "reply", "Powering on coffee bar lights"
+            )            
+            turn_on_coffeebar()
+                
+        elif function_name == 'poweroff_coffeebar':
+            from modules.module_kasa import turn_off_coffeebar
+            bot_response["reply"] = bot_response.get(
+                "reply", "Turning off coffee bar lights"
+                )
+            turn_off_coffeebar()
+                
+        elif function_name == 'poweron_espresso_machine':
+            from modules.module_kasa import turn_on_espresso_machine
+            bot_response["reply"] = bot_response.get(
+                "reply", "Brew something good today!"
+            )
+            turn_on_espresso_machine()
+
+        elif function_name == 'poweroff_espresso_machine':
+            from modules.module_kasa import turn_off_espresso_machine
+            bot_response["reply"] = bot_response.get(
+                "reply", "Turning off espresso machine"
+            )
+            turn_off_espresso_machine()
+                
         elif function_name == "system_control":
             action = parameters.get("action", "")
             if action == "exit":
@@ -846,7 +891,6 @@ def execute_function_call(func_call, bot_response, user_input):
                         os._exit(0)
 
                 threading.Thread(target=shutdown_after_tts, daemon=False).start()
-
             else:
                 bot_response["reply"] = "I didn't understand that system command."
 
