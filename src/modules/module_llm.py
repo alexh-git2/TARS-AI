@@ -127,7 +127,7 @@ def get_completion(user_prompt, interactions, istext=True):
 
 def _prepare_request_data(llm_backend, prompt):
     if llm_backend == "openai":
-        if CONFIG["LLM"]["openai_model"] == "gpt-5-mini":
+        if CONFIG["LLM"]["openai_model"].startswith("gpt-5"):
             url = f"{CONFIG['LLM']['base_url']}/v1/responses"
             data = {
                 "model": CONFIG["LLM"]["openai_model"],
