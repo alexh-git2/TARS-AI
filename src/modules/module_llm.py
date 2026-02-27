@@ -127,22 +127,30 @@ def get_completion(user_prompt, interactions, istext=True):
 
 def _prepare_request_data(llm_backend, prompt):
     if llm_backend == "openai":
-    #    if CONFIG["LLM"]["openai_model"] == 'gpt-5-mini':
-    #        url = f"{CONFIG['LLM']['base_url']}/v1/responses"
-    #        data = {"model":"gpt-5-mini","input":[{"role":"developer","content":[{"type":"input_text","text":"Hello World"}]},{"role":"user","content":[{"type":"input_text","text":"Hello World I am Alex"}]}],"tools":[],"text":{"format":{"type":"text"},"verbosity":"medium"},"reasoning":{"effort":"medium"},"include":["reasoning.encrypted_content","web_search_call.action.sources"]}
-    #    else:
-        url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
-        data = {
-            "model": CONFIG["LLM"]["openai_model"],
-            "messages": [
-                {"role": "system", "content": CONFIG["LLM"]["systemprompt"]},
-                {"role": "user", "content": prompt},
-            ],
-            "max_tokens": CONFIG["LLM"]["max_tokens"],
-            "temperature": CONFIG["LLM"]["temperature"],
-            "top_p": CONFIG["LLM"]["top_p"],
-            "response_format": {"type": "json_object"},
-        }
+        if CONFIG["LLM"]["openai_model"] == "gpt-5-mini":
+            url = f"{CONFIG['LLM']['base_url']}/v1/responses"
+            data = {
+                "model": CONFIG["LLM"]["openai_model"],
+                "input": [
+                    {"role": "system", "content": CONFIG["LLM"]["systemprompt"]},
+                    {"role": "user", "content": prompt},
+                ],
+                "tools": [],
+                "max_output_tokens": CONFIG["LLM"]["max_tokens"],
+            }
+        else:
+            url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
+            data = {
+                "model": CONFIG["LLM"]["openai_model"],
+                "messages": [
+                    {"role": "system", "content": CONFIG["LLM"]["systemprompt"]},
+                    {"role": "user", "content": prompt},
+                ],
+                "max_tokens": CONFIG["LLM"]["max_tokens"],
+                "temperature": CONFIG["LLM"]["temperature"],
+                "top_p": CONFIG["LLM"]["top_p"],
+                "response_format": {"type": "json_object"},
+            }
     elif llm_backend == "grok":
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
         data = {
@@ -194,8 +202,14 @@ def _extract_text(response_json, istext):
                 if llm_backend in ["openai", "grok", "deepinfra"]
                 else response_json["choices"][0]["text"]
             ).strip()
-        else:
-            raise KeyError("Invalid response format: 'choices' key not found.")
+        elif "output" in response_json:
+            for item in response_json["output"]:
+                if item["type"] == "message":
+                    content = item["content"]
+                    if content:
+                        return content[0]["text"]
+
+        raise KeyError("Invalid response format: 'choices' or 'output' key not found.")
     except (KeyError, IndexError, TypeError) as error:
         return f"Text extraction failed: {str(error)}"
 
@@ -400,13 +414,20 @@ def _summarize_search_results(search_results, user_question):
 
             if text and len(text) > 10:
                 return text
- 
-        if "output" in result: 
+
+        if "output" in result:
             if llm_backend in ["openai"]:
-                message_item = next((item for item in result["output"] if item.get('type') == 'message'), None)
-                text = None 
-                if message_item: 
-                    text = message_item['content']["text"].strip()
+                message_item = next(
+                    (
+                        item
+                        for item in result["output"]
+                        if item.get("type") == "message"
+                    ),
+                    None,
+                )
+                text = None
+                if message_item:
+                    text = message_item["content"]["text"].strip()
                 if text and text.startswith("{") and text.endswith("}"):
                     try:
                         parsed = json.loads(text)
@@ -798,34 +819,38 @@ def execute_function_call(func_call, bot_response, user_input):
 
             threading.Thread(target=launch_after_tts, daemon=False).start()
 
-        elif function_name == 'poweron_coffeebar':
+        elif function_name == "poweron_coffeebar":
             from modules.module_kasa import turn_on_coffeebar
+
             bot_response["reply"] = bot_response.get(
                 "reply", "Powering on coffee bar lights"
-            )            
+            )
             turn_on_coffeebar()
-                
-        elif function_name == 'poweroff_coffeebar':
+
+        elif function_name == "poweroff_coffeebar":
             from modules.module_kasa import turn_off_coffeebar
+
             bot_response["reply"] = bot_response.get(
                 "reply", "Turning off coffee bar lights"
-                )
+            )
             turn_off_coffeebar()
-                
-        elif function_name == 'poweron_espresso_machine':
+
+        elif function_name == "poweron_espresso_machine":
             from modules.module_kasa import turn_on_espresso_machine
+
             bot_response["reply"] = bot_response.get(
                 "reply", "Brew something good today!"
             )
             turn_on_espresso_machine()
 
-        elif function_name == 'poweroff_espresso_machine':
+        elif function_name == "poweroff_espresso_machine":
             from modules.module_kasa import turn_off_espresso_machine
+
             bot_response["reply"] = bot_response.get(
                 "reply", "Turning off espresso machine"
             )
             turn_off_espresso_machine()
-                
+
         elif function_name == "system_control":
             action = parameters.get("action", "")
             if action == "exit":
