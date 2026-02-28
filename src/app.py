@@ -21,7 +21,6 @@ import threading
 import time
 from datetime import datetime
 import warnings
-
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
 
 # === Set up paths first ===
@@ -59,7 +58,8 @@ from modules.module_main import (
     startup_initialization,
 )
 from modules.module_geolocation import update_geo_location
-
+from modules.module_kasa import start_kasa
+    
 # === Conditional Memory Manager Import ===
 if USE_LITE_MEMORY:
     from modules.module_memory_lite import MemoryManagerLite as MemoryManager
@@ -313,6 +313,9 @@ if __name__ == "__main__":
 
     # === Servo Initialization ===
     startup_initialization()
+
+    # === Initialize Kasa ===
+    start_kasa()
 
     # === Main Loop ===
     try:

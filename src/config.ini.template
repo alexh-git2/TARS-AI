@@ -31,10 +31,10 @@ vosk_model = vosk-model-small-en-us-0.15
 # Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15 or vosk-model-en-us-0.22)
 vad_method = silero
 # Enable silero, rms
-speechdelay = 5
+speechdelay = 6
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 standby_timer = 30
-# timer until TARS enters standby mode (seconds)
+# Timer until TARS enters standby mode if there is no conversation (seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
 
@@ -57,7 +57,7 @@ location_name = Montreal, Quebec, Canada
 
 [LLM] # Large Language Model configuration (OpenAI, Grok, Tabby, Ooba, or LOCAL)
 llm_backend = openai
-# Backend for LLM: [openai, grok, tabby, ooba] 
+# Backend for LLM: [openai, grok, tabby, ooba]
 base_url = https://api.openai.com
 # URL for the LLM backend API [OpenAI: https://api.openai.com] or [grok: https://api.x.ai]
 openai_model = gpt-4o-mini
@@ -277,6 +277,11 @@ battery_cutoff_voltage = 10
 # Minimum safe voltage before discharge should stop (in volts). Set this based on the battery's safe discharge voltage (e.g., 10.5V for a 12V battery).
 auto_shutdown = True
 # Protects the Raspberry pi and battery, when it reaches 0% the raspberry pi will shutdown by itself.
+
+[KASA]
+# this section is used to implmenent KASA smart switch options
+espresso_machine = Espresso Machine
+coffee_bar_lights = Coffee Bar Lights
 
 [MISC]
 ventilate = False
