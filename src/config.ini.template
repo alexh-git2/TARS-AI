@@ -32,7 +32,7 @@ vosk_model = vosk-model-small-en-us-0.15
 vad_method = silero
 # Enable silero, rms
 speechdelay = 6
-# Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
+# Tenths of seconds to wait before goint to sleep (20 = 2 seconds) testing123
 standby_timer = 30
 # Timer until TARS enters standby mode if there is no conversation (seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
