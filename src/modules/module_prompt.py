@@ -538,12 +538,12 @@ User: "Shut down the raspberry pi"
 Response: {{"question": "Shut down the raspberry pi", "reply": "Powering off now. Goodbye!", "function_calls": [{{"function": "system_control", "parameters": {{"action": "shutdown"}}}}], "new_memories": []}}
 
 Example 29 - Kasa Smart Switch Espresso (on):
-User: "Turn on espresso machine"
-Response: {{"question": "Turn on espresso machine", "reply": "Let's have some coffee!", "function_calls": [{{"function": "poweron_espresso_machine", "parameters": {{}}}}], "new_memories": []}}
+User: "Turn on espresso coffee machine"
+Response: {{"question": "Turn on espresso coffee machine", "reply": "Let's have some coffee!", "function_calls": [{{"function": "poweron_espresso_machine", "parameters": {{}}}}], "new_memories": []}}
 
 Example 30 - Kasa Smart Switch Espresso (off):
-User: "Turn off espresso machine"
-Response: {{"question": "Turn off espresso machine", "reply": "Turning off your espresso machine", "function_calls": [{{"function": "poweroff_espresso_machine", "parameters": {{}}}}], "new_memories": []}}
+User: "Turn off espresso coffee machine"
+Response: {{"question": "Turn off espresso coffee machine", "reply": "Turning off your espresso coffee machine", "function_calls": [{{"function": "poweroff_espresso_machine", "parameters": {{}}}}], "new_memories": []}}
 
 Example 31 - Kasa Smart Switch Coffeebar Lights (on):
 User: "Turn on coffee bar lights"
