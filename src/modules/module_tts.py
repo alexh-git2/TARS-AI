@@ -246,7 +246,7 @@ def initialize_interrupt():
             )
             try:
                 stt_manager.vosk_model = Model(model_path)
-                queue_debug_message(f"Loaded Vosk model from {model_path}")
+                # queue_debug_message(f"Loaded Vosk model from {model_path}")
             except Exception as e:
                 queue_message(f"ERROR: Failed to load Vosk model for interrupt: {e}")
                 return None
@@ -256,9 +256,9 @@ def initialize_interrupt():
             interrupt_recognizer = KaldiRecognizer(
                 stt_manager.vosk_model, stt_manager.SAMPLE_RATE
             )
-            queue_debug_message(
-                f"Created interrupt recognizer at {stt_manager.SAMPLE_RATE}Hz"
-            )
+            # queue_debug_message(
+            #    f"Created interrupt recognizer at {stt_manager.SAMPLE_RATE}Hz"
+            # )
         except Exception as e:
             queue_message(f"ERROR: Failed to create interrupt recognizer: {e}")
             return None
@@ -327,7 +327,7 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
         )
         return
 
-    queue_message("INFO: Interrupt listener started, listening for stop commands...")
+    # queue_message("INFO: Interrupt listener started, listening for stop commands...")
     sample_rate = stt_manager.SAMPLE_RATE if stt_manager else 16000
 
     # Try to initialize AEC, but make it optional
@@ -338,9 +338,9 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
         aec.set_stream_format(sample_rate_in=sample_rate, channel_count_in=1)
         aec.set_reverse_stream_format(sample_rate_in=sample_rate, channel_count_in=1)
         frame_size = aec.get_frame_size()
-        queue_debug_message(
-            f"AEC initialized for {sample_rate}Hz, frame size: {frame_size}"
-        )
+        # queue_debug_message(
+        #    f"AEC initialized for {sample_rate}Hz, frame size: {frame_size}"
+        # )
     except Exception as e:
         queue_debug_message(
             f"WARNING: AEC initialization failed: {e}, continuing without AEC"
@@ -352,6 +352,10 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
 
     # Buffer for reverse stream audio
     reverse_buffer = np.array([], dtype=np.int16)
+
+    # Buffer for recent partial results for stable interrupt detection
+    recent_partials = []
+    max_recent = 5
 
     try:
         with sd.InputStream(
@@ -410,8 +414,6 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
                     transcript = result.get("text", "").lower().strip()
 
                     if transcript:
-                        queue_debug_message(f"TRANSCRIPTION: '{transcript}'")
-
                         # Words that trigger interrupt
                         interrupt_words = [
                             "stop",
@@ -426,16 +428,54 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
                             interrupt_event.set()
                             break
                 else:
-                    # Check partial results to see if speech is being detected
+                    # Check partial results for immediate interrupt detection
                     try:
                         partial_result = json.loads(
                             interrupt_recognizer.PartialResult()
                         )
-                        partial_text = partial_result.get("result", [])
+                        partial_text = partial_result.get("partial", "").lower().strip()
                         if partial_text:
-                            queue_debug_message(f"PARTIAL: {partial_text}")
-                    except:
-                        pass
+                            # queue_debug_message(f"PARTIAL: '{partial_text}'")
+
+                            # Track recent partials for stability
+                            recent_partials.append(partial_text)
+                            if len(recent_partials) > max_recent:
+                                recent_partials.pop(0)
+
+                            # Check for interrupt words in current partial
+                            interrupt_words = [
+                                "stop",
+                                "cancel",
+                                "abort",
+                                "nevermind",
+                                "wait",
+                                "hold on",
+                            ]
+
+                            # Check current partial
+                            if any(word in partial_text for word in interrupt_words):
+                                queue_message(
+                                    f"INFO: Interrupt detected (partial) - '{partial_text}'"
+                                )
+                                interrupt_event.set()
+                                break
+
+                            # Also check if multiple recent partials contain interrupt words (more stable detection)
+                            recent_combined = " ".join(
+                                recent_partials[-2:]
+                            )  # Last 2 partials
+                            if len(recent_partials) >= 2 and any(
+                                word in recent_combined for word in interrupt_words
+                            ):
+                                queue_message(
+                                    f"INFO: Interrupt detected (stable) - '{recent_combined}'"
+                                )
+                                interrupt_event.set()
+                                break
+
+                    except Exception as e:
+                        queue_debug_message(f"DEBUG: Partial result error: {e}")
+
     except Exception as e:
         queue_message(f"ERROR: Interrupt listening failed: {e}")
     queue_debug_message("Interrupt listener stopped")
@@ -508,9 +548,9 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 if samplerate != target_sr:
                     num_samples = int(len(data) * target_sr / samplerate)
                     data = signal.resample(data, num_samples)
-                    queue_debug_message(
-                        f"Resampled speaker audio from {samplerate}Hz to {target_sr}Hz"
-                    )
+                    # queue_debug_message(
+                    #    f"Resampled speaker audio from {samplerate}Hz to {target_sr}Hz"
+                    # )
 
                 # Convert to int16 for echo cancellation reference
                 speaker_int16 = np.clip(data * 32767, -32768, 32767).astype(np.int16)
