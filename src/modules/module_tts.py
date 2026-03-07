@@ -21,6 +21,7 @@ import asyncio
 import threading
 import json
 from scipy import signal
+from modules.module_stt import get_stt_manager
 
 from modules.module_messageQue import queue_message, queue_debug_message
 
@@ -102,9 +103,6 @@ try:
     text_to_speech_with_pipelining_minimax = _minimax
 except ImportError:
     pass
-
-from modules.module_stt import get_stt_manager
-from aec_audio_processing import AudioProcessor  # already there
 
 
 def update_tts_settings(ttsurl):
@@ -280,42 +278,36 @@ def cancel_speaker_echo(mic_audio, speaker_audio):
         mic_audio = mic_audio[:min_len]
         speaker_audio = speaker_audio[:min_len]
 
-        # Normalize speaker audio to prevent over-cancellation
+        # Normalize both to [-1, 1] for better cancellation
+        mic_max = np.max(np.abs(mic_audio))
         speaker_max = np.max(np.abs(speaker_audio))
+
+        if mic_max > 0:
+            mic_norm = mic_audio.astype(np.float32) / mic_max
+        else:
+            mic_norm = mic_audio.astype(np.float32)
+
         if speaker_max > 0:
-            speaker_audio = (speaker_audio / speaker_max) * np.max(np.abs(mic_audio))
+            speaker_norm = speaker_audio.astype(np.float32) / speaker_max
+        else:
+            speaker_norm = speaker_audio.astype(np.float32)
 
-        # Simple echo cancellation: subtract scaled speaker audio from mic
-        # Use correlation to find optimal scaling factor
-        correlation = np.dot(mic_audio, speaker_audio) / (
-            np.dot(speaker_audio, speaker_audio) + 1e-8
+        # Compute optimal scaling factor using correlation
+        correlation = np.dot(mic_norm, speaker_norm) / (
+            np.dot(speaker_norm, speaker_norm) + 1e-8
         )
-        echo_estimate = correlation * speaker_audio
+        echo_estimate = correlation * speaker_norm
 
-        # Subtract echo and clip to int16 range
-        cancelled = mic_audio - echo_estimate * 0.9  # 0.9 factor for stability
-        cancelled = np.clip(cancelled, -32768, 32767).astype(np.int16)
+        # Subtract echo estimate (full cancellation)
+        cancelled_norm = mic_norm - echo_estimate
+
+        # Scale back to int16 range
+        cancelled = np.clip(cancelled_norm * 32767, -32768, 32767).astype(np.int16)
 
         return cancelled
     except Exception as e:
         queue_message(f"DEBUG: Echo cancellation failed: {e}")
         return mic_audio
-
-
-def apply_vad_filtering(audio_chunk, stt_manager):
-    """Use voice activity detection to filter out echo and non-speech"""
-    detected_speech = False
-    try:
-        # Use the existing Silero VAD from STT manager
-        # voice_activity_detection_main returns (is_silence, detected_speech, silent_frames)
-        is_silence, _, _ = stt_manager.voice_activity_detection_main(
-            audio_chunk, detected_speech, silent_frames=0
-        )
-        # Return True if speech detected (is_silence is False)
-        return not is_silence
-    except Exception as e:
-        queue_message(f"DEBUG: VAD check failed: {e}")
-        return False
 
 
 def listen_for_stop(interrupt_event, reference_audio_queue=None):
@@ -330,25 +322,7 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
     # queue_message("INFO: Interrupt listener started, listening for stop commands...")
     sample_rate = stt_manager.SAMPLE_RATE if stt_manager else 16000
 
-    # Try to initialize AEC, but make it optional
-    aec = None
-    frame_size = None
-    try:
-        aec = AudioProcessor()
-        aec.set_stream_format(sample_rate_in=sample_rate, channel_count_in=1)
-        aec.set_reverse_stream_format(sample_rate_in=sample_rate, channel_count_in=1)
-        frame_size = aec.get_frame_size()
-        # queue_debug_message(
-        #    f"AEC initialized for {sample_rate}Hz, frame size: {frame_size}"
-        # )
-    except Exception as e:
-        queue_debug_message(
-            f"WARNING: AEC initialization failed: {e}, continuing without AEC"
-        )
-        aec = None
-
-    if frame_size is None or frame_size <= 0:
-        frame_size = int(sample_rate * 0.02)  # fallback ~20ms
+    frame_size = int(sample_rate * 0.01)  # 10ms frame
 
     # Buffer for reverse stream audio
     reverse_buffer = np.array([], dtype=np.int16)
@@ -370,8 +344,8 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
                         f"DEBUG: read size {len(data_mono)} differs from frame_size {frame_size}"
                     )
 
-                # Accumulate speaker audio for AEC
-                if aec and reference_audio_queue:
+                # Accumulate speaker audio for echo cancellation
+                if reference_audio_queue:
                     try:
                         while not reference_audio_queue.empty():
                             speaker_chunk = reference_audio_queue.get_nowait()
@@ -383,31 +357,20 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
                                 reverse_buffer = np.concatenate(
                                     [reverse_buffer, speaker_chunk]
                                 )
+                                # queue_debug_message(
+                                #    f"Speaker chunk added to reverse buffer, new len: {len(reverse_buffer)}"
+                                # )
                     except Exception as e:
                         queue_debug_message(f"DEBUG: Queue error: {e}")
 
-                    # Process buffered reverse stream in frame-sized chunks
-                    while len(reverse_buffer) >= frame_size:
-                        reverse_frame = reverse_buffer[:frame_size]
-                        try:
-                            aec.process_reverse_stream(reverse_frame.tobytes())
-                            reverse_buffer = reverse_buffer[frame_size:]
-                        except Exception as e:
-                            queue_debug_message(f"DEBUG: Reverse stream failed: {e}")
-                            reverse_buffer = reverse_buffer[frame_size:]
-
-                # Process mic stream through AEC if available
-                if aec:
-                    try:
-                        data_bytes = aec.process_stream(data_mono.tobytes())
-                        data_mono = np.frombuffer(data_bytes, dtype=np.int16)
-                        # queue_debug_message(f"AEC processed, len: {len(data_mono)}")
-                    except Exception as e:
-                        expected = aec.get_frame_size()
-                        queue_debug_message(
-                            f"DEBUG: AEC failed len={len(data_mono)} expected={expected} error={e}, using raw audio"
-                        )
-                        # Continue with raw audio on AEC failure
+                # Apply simple echo cancellation
+                if len(reverse_buffer) >= len(data_mono):
+                    speaker_segment = reverse_buffer[: len(data_mono)]
+                    reverse_buffer = reverse_buffer[len(data_mono) :]
+                    data_mono = cancel_speaker_echo(data_mono, speaker_segment)
+                    # queue_debug_message(
+                    #    f"Echo cancellation applied, buffer len: {len(reverse_buffer)}"
+                    # )
 
                 if interrupt_recognizer.AcceptWaveform(data_mono.tobytes()):
                     result = json.loads(interrupt_recognizer.Result())
@@ -478,7 +441,7 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
 
     except Exception as e:
         queue_message(f"ERROR: Interrupt listening failed: {e}")
-    queue_debug_message("Interrupt listener stopped")
+    # queue_debug_message("Interrupt listener stopped")
 
 
 def start_tts_interrupt_listener(reference_audio_queue=None):
@@ -540,7 +503,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 if max_val > 0:
                     data = data / max_val
 
-                gain = 1.5
+                gain = 0.5
                 data = np.clip(data * gain, -1.0, 1.0)
 
                 # Resample to microphone sample rate (16000 Hz) for AEC
@@ -557,7 +520,13 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 if reference_audio_queue and not is_wakeword:
                     try:
                         reference_audio_queue.put_nowait(speaker_int16)
+                        # queue_debug_message(
+                        #    f"Speaker audio queued for AEC, len: {len(speaker_int16)}"
+                        # )
                     except asyncio.QueueFull:
+                        queue_debug_message(
+                            "Reference audio queue full, dropping chunk"
+                        )
                         pass  # Drop oldest reference if queue is full
 
                 sd.play(data, target_sr)
