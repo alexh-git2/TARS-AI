@@ -626,6 +626,9 @@ def load_config():
             "show_bot_response": config.getboolean(
                 "DEBUG", "show_bot_response", fallback=True
             ),
+            "disable_wake_word": config.getboolean(
+                "DEBUG", "disable_wake_word", fallback=False
+            )
         },
     }
 

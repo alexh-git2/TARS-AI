@@ -1168,6 +1168,12 @@ class STTManager:
         if self.config["STT"]["use_indicators"]:
             self.play_wav("../stt/beep_off.wav")
 
+        if self.config["DEBUG"]["disable_wake_word"]:
+            queue_message(
+                "DEBUG: Wake word detection disabled, proceeding to transcription."
+            )
+            return True
+
         character_path = self.config.get("CHAR", {}).get("character_card_path")
         character_name = (
             os.path.splitext(os.path.basename(character_path))[0]
