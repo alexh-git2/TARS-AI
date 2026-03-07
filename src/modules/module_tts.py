@@ -20,8 +20,9 @@ from io import BytesIO
 import asyncio
 import threading
 import json
+from scipy import signal
 
-from modules.module_messageQue import queue_message
+from modules.module_messageQue import queue_message, queue_debug_message
 
 # Conditional TTS module imports - not all are available on all devices
 text_to_speech_with_pipelining_piper = None
@@ -103,6 +104,7 @@ except ImportError:
     pass
 
 from modules.module_stt import get_stt_manager
+from aec_audio_processing import AudioProcessor  # already there
 
 
 def update_tts_settings(ttsurl):
@@ -244,13 +246,29 @@ def initialize_interrupt():
             )
             try:
                 stt_manager.vosk_model = Model(model_path)
+                queue_debug_message(f"Loaded Vosk model from {model_path}")
             except Exception as e:
                 queue_message(f"ERROR: Failed to load Vosk model for interrupt: {e}")
-                return
+                return None
+
+        # Create recognizer with the (loaded or existing) model
+        try:
             interrupt_recognizer = KaldiRecognizer(
                 stt_manager.vosk_model, stt_manager.SAMPLE_RATE
             )
+            queue_debug_message(
+                f"Created interrupt recognizer at {stt_manager.SAMPLE_RATE}Hz"
+            )
+        except Exception as e:
+            queue_message(f"ERROR: Failed to create interrupt recognizer: {e}")
+            return None
+
         return interrupt_recognizer
+    else:
+        if not VOSK_AVAILABLE:
+            queue_message("ERROR: Vosk not available for interrupt detection")
+        if not stt_manager:
+            queue_message("ERROR: STT manager not initialized")
     return None
 
 
@@ -304,39 +322,95 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
     stt_manager = get_stt_manager()
     interrupt_recognizer = initialize_interrupt()
     if not interrupt_recognizer or not stt_manager:
+        queue_message(
+            "ERROR: Cannot start interrupt listener - missing recognizer or STT manager"
+        )
         return
+
+    queue_message("INFO: Interrupt listener started, listening for stop commands...")
+    sample_rate = stt_manager.SAMPLE_RATE if stt_manager else 16000
+
+    # Try to initialize AEC, but make it optional
+    aec = None
+    frame_size = None
+    try:
+        aec = AudioProcessor()
+        aec.set_stream_format(sample_rate_in=sample_rate, channel_count_in=1)
+        aec.set_reverse_stream_format(sample_rate_in=sample_rate, channel_count_in=1)
+        frame_size = aec.get_frame_size()
+        queue_debug_message(
+            f"AEC initialized for {sample_rate}Hz, frame size: {frame_size}"
+        )
+    except Exception as e:
+        queue_debug_message(
+            f"WARNING: AEC initialization failed: {e}, continuing without AEC"
+        )
+        aec = None
+
+    if frame_size is None or frame_size <= 0:
+        frame_size = int(sample_rate * 0.02)  # fallback ~20ms
+
+    # Buffer for reverse stream audio
+    reverse_buffer = np.array([], dtype=np.int16)
+
     try:
         with sd.InputStream(
-            samplerate=stt_manager.SAMPLE_RATE, channels=1, dtype="int16"
+            samplerate=sample_rate, channels=1, dtype="int16"
         ) as stream:
             while not interrupt_event.is_set():
-                data, _ = stream.read(
-                    int(stt_manager.SAMPLE_RATE * 0.25)
-                )  # 250ms chunks
+                data, _ = stream.read(frame_size)
                 data_mono = data[:, 0] if data.ndim > 1 else data
+                data_mono = data_mono.astype(np.int16)
+                if len(data_mono) != frame_size:
+                    queue_debug_message(
+                        f"DEBUG: read size {len(data_mono)} differs from frame_size {frame_size}"
+                    )
 
-                # Apply echo cancellation using reference signal
-                if reference_audio_queue:
+                # Accumulate speaker audio for AEC
+                if aec and reference_audio_queue:
                     try:
-                        # Get latest speaker audio for cancellation
-                        speaker_chunk = None
                         while not reference_audio_queue.empty():
                             speaker_chunk = reference_audio_queue.get_nowait()
-
-                        if speaker_chunk is not None:
-                            # Cancel echo from mic input
-                            data_mono = cancel_speaker_echo(data_mono, speaker_chunk)
+                            if speaker_chunk is not None:
+                                if not isinstance(speaker_chunk, np.ndarray):
+                                    speaker_chunk = np.frombuffer(
+                                        speaker_chunk, dtype=np.int16
+                                    )
+                                reverse_buffer = np.concatenate(
+                                    [reverse_buffer, speaker_chunk]
+                                )
                     except Exception as e:
-                        queue_message(f"DEBUG: Could not apply echo cancellation: {e}")
+                        queue_debug_message(f"DEBUG: Queue error: {e}")
 
-                # Filter with VAD - only process if actual speech detected
-                is_speech = apply_vad_filtering(data_mono, stt_manager)
+                    # Process buffered reverse stream in frame-sized chunks
+                    while len(reverse_buffer) >= frame_size:
+                        reverse_frame = reverse_buffer[:frame_size]
+                        try:
+                            aec.process_reverse_stream(reverse_frame.tobytes())
+                            reverse_buffer = reverse_buffer[frame_size:]
+                        except Exception as e:
+                            queue_debug_message(f"DEBUG: Reverse stream failed: {e}")
+                            reverse_buffer = reverse_buffer[frame_size:]
 
-                if is_speech:
-                    # Only send voice activity to recognizer
-                    if interrupt_recognizer.AcceptWaveform(data_mono.tobytes()):
-                        result = json.loads(interrupt_recognizer.Result())
-                        transcript = result.get("text", "").lower()
+                # Process mic stream through AEC if available
+                if aec:
+                    try:
+                        data_bytes = aec.process_stream(data_mono.tobytes())
+                        data_mono = np.frombuffer(data_bytes, dtype=np.int16)
+                        # queue_debug_message(f"AEC processed, len: {len(data_mono)}")
+                    except Exception as e:
+                        expected = aec.get_frame_size()
+                        queue_debug_message(
+                            f"DEBUG: AEC failed len={len(data_mono)} expected={expected} error={e}, using raw audio"
+                        )
+                        # Continue with raw audio on AEC failure
+
+                if interrupt_recognizer.AcceptWaveform(data_mono.tobytes()):
+                    result = json.loads(interrupt_recognizer.Result())
+                    transcript = result.get("text", "").lower().strip()
+
+                    if transcript:
+                        queue_debug_message(f"TRANSCRIPTION: '{transcript}'")
 
                         # Words that trigger interrupt
                         interrupt_words = [
@@ -351,8 +425,20 @@ def listen_for_stop(interrupt_event, reference_audio_queue=None):
                             queue_message(f"INFO: Interrupt detected - '{transcript}'")
                             interrupt_event.set()
                             break
+                else:
+                    # Check partial results to see if speech is being detected
+                    try:
+                        partial_result = json.loads(
+                            interrupt_recognizer.PartialResult()
+                        )
+                        partial_text = partial_result.get("result", [])
+                        if partial_text:
+                            queue_debug_message(f"PARTIAL: {partial_text}")
+                    except:
+                        pass
     except Exception as e:
         queue_message(f"ERROR: Interrupt listening failed: {e}")
+    queue_debug_message("Interrupt listener stopped")
 
 
 def start_tts_interrupt_listener(reference_audio_queue=None):
@@ -360,7 +446,7 @@ def start_tts_interrupt_listener(reference_audio_queue=None):
     interrupt_thread = threading.Thread(
         target=listen_for_stop,
         args=(interrupt_event, reference_audio_queue),
-        daemon=True,
+        daemon=False,  # Properly manage thread lifecycle
     )
     interrupt_thread.start()
     return interrupt_event, interrupt_thread
@@ -369,7 +455,8 @@ def start_tts_interrupt_listener(reference_audio_queue=None):
 async def play_audio_chunks(text, config, is_wakeword=False):
     audio_queue = asyncio.Queue(maxsize=3)
     synthesis_done = asyncio.Event()
-    interrupt_event = asyncio.Event()
+    interrupt_event = None
+    interrupt_thread = None
     reference_audio_queue = None
 
     if not is_wakeword:
@@ -382,7 +469,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
     async def synthesize_chunks():
         try:
             async for audio_chunk in generate_tts_audio(text, config, is_wakeword):
-                if interrupt_event.is_set():
+                if interrupt_event and interrupt_event.is_set():
                     break
                 await audio_queue.put(audio_chunk)
         except Exception as e:
@@ -405,7 +492,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                         break
                     continue
 
-                if interrupt_event.is_set():
+                if interrupt_event and interrupt_event.is_set():
                     break
 
                 data, samplerate = sf.read(audio_chunk, dtype="float32")
@@ -416,17 +503,26 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 gain = 1.5
                 data = np.clip(data * gain, -1.0, 1.0)
 
+                # Resample to microphone sample rate (16000 Hz) for AEC
+                target_sr = 16000
+                if samplerate != target_sr:
+                    num_samples = int(len(data) * target_sr / samplerate)
+                    data = signal.resample(data, num_samples)
+                    queue_debug_message(
+                        f"Resampled speaker audio from {samplerate}Hz to {target_sr}Hz"
+                    )
+
                 # Convert to int16 for echo cancellation reference
-                speaker_int16 = (data * 32767).astype(np.int16)
+                speaker_int16 = np.clip(data * 32767, -32768, 32767).astype(np.int16)
                 if reference_audio_queue and not is_wakeword:
                     try:
                         reference_audio_queue.put_nowait(speaker_int16)
                     except asyncio.QueueFull:
                         pass  # Drop oldest reference if queue is full
 
-                sd.play(data, samplerate)
+                sd.play(data, target_sr)
                 while sd.get_stream().active:
-                    if interrupt_event.is_set():
+                    if interrupt_event and interrupt_event.is_set():
                         sd.stop()
                         break
 
@@ -442,7 +538,11 @@ async def play_audio_chunks(text, config, is_wakeword=False):
 
     await asyncio.gather(synthesize_chunks(), play_chunks())
 
-    # Stop the interrupt thread
-    if not is_wakeword:
+    # Stop the interrupt thread cleanly
+    if interrupt_event and interrupt_thread:
         interrupt_event.set()
-        interrupt_thread.join(timeout=1)
+        interrupt_thread.join(timeout=2)
+        if interrupt_thread.is_alive():
+            queue_message("WARNING: Interrupt thread did not stop cleanly")
+        else:
+            queue_debug_message("Interrupt thread stopped successfully")
