@@ -19,7 +19,7 @@ wake_word_processor = picovoice
 # Options: picovoice, fastrtc, atomik
 sensitivity = 7
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for Atomik wake word detection. 
-stt_processor = faster-whisper
+stt_processor = vosk
 #vosk, faster-whisper, silero, fastrtc, openai (for other languages than english) or external
 use_indicators = False
 # Use beeps to indicate when listening
@@ -281,7 +281,9 @@ auto_shutdown = True
 [KASA]
 # this section is used to implmenent KASA smart switch options
 espresso_machine = Espresso Machine
+# alias name of the smart plug, used for fetching the device for use
 coffee_bar_lights = Coffee Bar Lights
+# alias name of the smart plug, used for fetching the device for use
 
 [MISC]
 ventilate = False

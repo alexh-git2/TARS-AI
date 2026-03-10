@@ -538,7 +538,7 @@ class STTManager:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
 
-    def _transcribe_with_fastrtc(self):
+    def _transcribe_with_fastrtc_legacy(self):
         """Transcribe audio using FastRTC STT with improved speech detection."""
         audio_buffer = BytesIO()
         detected_speech = False
@@ -621,7 +621,80 @@ class STTManager:
         else:
             return None
 
-    def _transcribe_with_vosk(self):
+    def _transcribe_with_fastrtc(self):
+        """Transcribe audio using FastRTC STT with improved speech detection."""
+        audio_buffer = BytesIO()
+        detected_speech = False
+        silent_frames = 0
+        pre_roll_buffer = []
+        PRE_ROLL_FRAMES = 10
+        conversation_started = False
+
+        with (
+            sd.InputStream(
+                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+            ) as stream,
+            wave.open(audio_buffer, "wb") as wf,
+        ):
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(self.SAMPLE_RATE)
+
+            start_time = time.time()
+
+            while time.time() - start_time <= self.STANDBY_TIMER:
+                data, _ = stream.read(4000)
+
+                is_silence, detected_speech, silent_frames = (
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
+                    )
+                )
+
+                if not detected_speech:
+                    pre_roll_buffer.append(data.tobytes())
+                    if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
+                        pre_roll_buffer.pop(0)
+                else:
+                    if conversation_started:
+                        start_time = time.time()
+
+                    if not conversation_started:
+                        conversation_started = True
+                        for pre_roll_data in pre_roll_buffer:
+                            wf.writeframes(pre_roll_data)
+                        pre_roll_buffer = []
+
+                    wf.writeframes(data.tobytes())
+
+                if conversation_started and is_silence:
+                    pre_roll_buffer = []
+                    detected_speech = False
+                    conversation_started = False
+
+                    audio_buffer.seek(0)
+                    if audio_buffer.getbuffer().nbytes == 0:
+                        return None
+
+                    audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+
+                    audio_max = np.abs(audio_data).max()
+                    if audio_max < 0.1:
+                        audio_data = audio_data * (0.3 / max(audio_max, 0.001))
+
+                    audio_data = np.clip(audio_data, -1.0, 1.0)
+
+                    transcript = self.fastrtc_model.stt(
+                        (self.SAMPLE_RATE, audio_data)
+                    ).strip()
+
+                    if transcript:
+                        formatted_result = {"text": transcript}
+                        if self.utterance_callback:
+                            self.utterance_callback(json.dumps(formatted_result))
+                        return formatted_result
+
+    def _transcribe_with_vosk_legacy(self):
         """Transcribe audio using the local Vosk model."""
         if KaldiRecognizer is None or self.vosk_model is None:
             queue_message("ERROR: Vosk not available for transcription")
@@ -662,6 +735,69 @@ class STTManager:
                     if self.utterance_callback:
                         self.utterance_callback(result)
                     return result
+        return None
+
+    def _transcribe_with_vosk(self):
+        """Transcribe audio using the local Vosk model."""
+        if KaldiRecognizer is None or self.vosk_model is None:
+            queue_message("ERROR: Vosk not available for transcription")
+            return None
+
+        recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
+        recognizer.SetWords(False)
+        recognizer.SetPartialWords(False)
+
+        detected_speech = False
+        silent_frames = 0
+        target_time = time.time() + self.STANDBY_TIMER
+        conversation_started = False
+        conversation_stopped = False
+        combined_text = ""
+
+        with sd.InputStream(
+            samplerate=self.SAMPLE_RATE,
+            channels=1,
+            dtype="int16",
+            blocksize=4000,
+            latency="high",
+        ) as stream:
+            while time.time() < target_time:
+                data, _ = stream.read(4000)
+                conversation_stopped, detected_speech, silent_frames = (
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
+                    )
+                )
+
+                if detected_speech:
+                    target_time = time.time() + self.STANDBY_TIMER
+                    if not conversation_started:
+                        conversation_started = True
+
+                data = self.amplify_audio(data)  # amp the sound
+
+                if recognizer.AcceptWaveform(data.tobytes()):
+                    # queue_debug_message("BEGIN TRANSCRIPTION")
+                    result = recognizer.Result()
+                    if result:
+                        result_json = json.loads(result)
+                        text = result_json.get("text", "")
+                        if text:
+                            combined_text += " " + text
+
+                if (
+                    self.utterance_callback
+                    and conversation_started
+                    and conversation_stopped
+                    and combined_text
+                ):
+                    # queue_debug_message("END TRANSCRIPTION")
+                    formatted_result = {"text": combined_text.strip()}
+                    self.utterance_callback(result)
+                    return formatted_result
+
+        # return to standby beep
+        self.play_wav("../stt/beep_off.wav")
         return None
 
     def _transcribe_with_openAi(self):
@@ -810,13 +946,11 @@ class STTManager:
         detected_speech = False
         conversation_started = False
         try:
-
             with (
                 sd.InputStream(
                     samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
                 ) as stream,
             ):
-
                 target_time = time.time() + self.STANDBY_TIMER
                 while time.time() < target_time:
                     data, _ = stream.read(4000)
@@ -827,9 +961,9 @@ class STTManager:
                         )
                     )
 
-                    #queue_debug_message(
-                    #     f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}"
-                    #)
+                    # queue_debug_message(
+                    #    f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}"
+                    # )
                     if detected_speech:
                         target_time = time.time() + self.STANDBY_TIMER
                         if not conversation_started:
@@ -839,6 +973,7 @@ class STTManager:
                         data_buffer.append(data)
 
                     if conversation_started and conversation_stopped:
+                        # queue_debug_message("BEGIN TRANSCRIPTION")
                         data_arr = np.concatenate(data_buffer)
                         audio_np = np.frombuffer(data_arr, dtype=np.int16)
                         audio_float = audio_np.astype(np.float32) / 32768.0
@@ -855,17 +990,13 @@ class STTManager:
                             segments, _ = self.faster_whisper_model.transcribe(
                                 audio_data,
                                 temperature=0.0,
-                                beam_size=5,
+                                beam_size=1,
                                 language="en",
+                                vad_filter=False,
                             )
-                            #queue_debug_message(
-                            #    f"TRANSCRIBED FINISHED"
-                            #)
-                            segments = list(segments)
+                            # queue_debug_message("TRANSCRIBED FINISHED")
                             conversation_text = " ".join(s.text for s in segments)
-                            #queue_debug_message(
-                            #    f"FINISHED BUILDING CONVERSATION"
-                            #)
+                            # queue_debug_message("FINISHED BUILDING CONVERSATION")
                             if conversation_text:
                                 formatted_result = {"text": conversation_text}
                                 self.interactions += 1
@@ -876,15 +1007,17 @@ class STTManager:
                                     return formatted_result
 
                         except Exception as e:
-                            queue_debug_message(f"WARNING: Chunk transcription failed: {e}")
+                            queue_debug_message(
+                                f"WARNING: Chunk transcription failed: {e}"
+                            )
                         finally:
                             data_buffer = []
                             conversation_stopped = False
                             conversation_started = False
                             silent_frames = 0
                             detected_speech = False
-                            
-                # return to standby beep            
+
+                # return to standby beep
                 self.play_wav("../stt/beep_off.wav")
         except Exception as e:
             queue_debug_message(f"ERROR: Faster-Whisper recording failed: {e}")
