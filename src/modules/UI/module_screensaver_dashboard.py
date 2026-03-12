@@ -53,12 +53,12 @@ def load_ini_config():
     config = configparser.ConfigParser()
     
     defaults = {
-        'latitude': GEOLOCATION.get("lon",fallback=None),
-        'longitude': GEOLOCATION.get("lat",fallback=None),
-        'timezone': GEOLOCATION.get("timezone",fallback=None),
-        'location_name': GEOLOCATION.get("location_name",fallback=None),
+        'latitude': GEOLOCATION.get("lon"),
+        'longitude': GEOLOCATION.get("lat"),
+        'timezone': GEOLOCATION.get("timezone"),
+        'location_name': GEOLOCATION.get("location_name"),
         'language': 'en',
-        'country': GEOLOCATION.get("country",fallback=None),
+        'country': GEOLOCATION.get("country"),
         'temp_unit': 'celsius',
         'weather_update_interval': 600,
         'news_update_interval': 300,
