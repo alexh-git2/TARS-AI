@@ -12,9 +12,9 @@ or specific geographic regions.
 """
 
 import requests
-import json
 
 from modules.module_config import load_config
+from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
 
@@ -30,6 +30,7 @@ GEOLOCATION = {
     "lon": None,
     "postal": None,
     "timezone": None,
+    "location_name": None,
 }
 
 
@@ -56,6 +57,41 @@ def get_location_info(ip):
         return None
 
 
+def resolve_location_name(lat, lon):
+    try:
+        import requests
+
+        resp = requests.get(
+            f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=10",
+            headers={"User-Agent": "TARS-AI/5.0"},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        addr = data.get("address", {})
+        city = (
+            addr.get("city")
+            or addr.get("town")
+            or addr.get("village")
+            or addr.get("municipality", "")
+        )
+        state = addr.get("state", "")
+        country = addr.get("country", "")
+
+        parts = [p for p in [city, state, country] if p]
+        name = ", ".join(parts) if parts else data.get("display_name", "")
+
+        if name:
+            queue_message(f"[LOCATION] Resolved: {name}")
+            return name
+
+    except Exception as e:
+        queue_message(f"[LOCATION] Reverse geocode failed: {e}")
+
+    return None
+
+
 def update_geo_location():
     global GEOLOCATION
     ip = get_my_ip_address()
@@ -67,6 +103,8 @@ def update_geo_location():
             lat, lon = loc.split(",")
             location_info["lat"] = lat
             location_info["lon"] = lon
+            location_name = resolve_location_name(lat, lon)
+            location_info["location_name"] = location_name
 
         print("[GEO_SERVICES] Initializing service...")
         print("[GEO_SERVICES] ip:", location_info.get("ip"))
@@ -76,6 +114,7 @@ def update_geo_location():
             "lon:",
             location_info.get("lon"),
         )
+        print("[GEO_SERVICES] location name:",location_info.get("location_name"))
         GEOLOCATION.update(location_info)
     else:
         print("[GEO_SERVICES] Failed to find location.")
