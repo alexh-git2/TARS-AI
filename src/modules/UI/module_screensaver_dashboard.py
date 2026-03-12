@@ -41,7 +41,7 @@ except ImportError:
 import re
 
 from modules.module_config import load_config
-from modules_geo_location import GEOLOCATION
+from modules.module_geolocation import GEOLOCATION
 
 CONFIG = load_config()
 
