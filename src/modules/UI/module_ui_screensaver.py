@@ -37,6 +37,7 @@ from UI.module_screensaver_defrag import DefragAnimation
 from UI.module_screensaver_bounce import BounceAnimation
 from UI.module_screensaver_endurance import EnduranceAnimation
 from UI.module_screensaver_toasters import FlyingToastersAnimation
+from UI.module_app_state import app_state
 
 try:
     from OpenGL.GL import *
@@ -312,14 +313,14 @@ class ScreensaverManager:
         return False
 
     def is_active(self):
-        return self.active and self.current_animation is not None
+        return self.active and app_state.screensaver_enabled and self.current_animation is not None
 
     def deactivate(self):
         self.active = False
         self.reset_timer()
 
     def render(self):
-        if not self.active or not self.current_animation:
+        if not self.active or not self.current_animation or not app_state.screensaver_enabled:
             return False
             
         if self.timeout > 0 and (time.time() - self.last_activity) <= self.timeout:

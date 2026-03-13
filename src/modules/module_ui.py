@@ -44,6 +44,7 @@ from UI.module_ui_video import VideoSystem
 from UI.module_ui_camera import CameraModule
 from UI.module_ui_screensaver import ScreensaverManager
 from UI.module_screensaver_dashboard import DashboardAnimation
+from UI.module_app_state import app_state
 
 CONFIG = load_config()
 screenWidth = CONFIG["UI"].get("screen_width", 0)  # 0 = auto-detect
@@ -254,6 +255,7 @@ class UIManager(threading.Thread):
                 self.terminal_system.set_camera_active(False)
 
     def display_dashboard(self):
+        app_state.screensaver_enabled = False  # Disable screensaver while dashboard is active
         display_flags = pygame.DOUBLEBUF | pygame.OPENGL | pygame.FULLSCREEN
         screen = pygame.display.set_mode((0, 0), display_flags)
         actual_size = screen.get_size()
@@ -279,7 +281,8 @@ class UIManager(threading.Thread):
             dashboard.render()
 
         dashboard.cleanup()
-
+        self.screensaver_manager.reset_timer()
+        app_state.screensaver_enabled = True  # Re-enable screensaver after dashboard is closed
     def pause(self):
         self.paused = True
 
