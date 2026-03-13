@@ -21,54 +21,7 @@ from datetime import datetime
 import os
 import re
 from modules.module_messageQue import queue_message
-from modules.module_geolocation import GEOLOCATION
-
-_location_cache = {"lat": None, "lon": None, "name": None}
-
-
-def _resolve_location_name(lat, lon):
-    global _location_cache
-
-    if (
-        _location_cache["lat"] == lat
-        and _location_cache["lon"] == lon
-        and _location_cache["name"]
-    ):
-        return _location_cache["name"]
-
-    try:
-        import requests
-
-        resp = requests.get(
-            f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=10",
-            headers={"User-Agent": "TARS-AI/5.0"},
-            timeout=5,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        addr = data.get("address", {})
-        city = (
-            addr.get("city")
-            or addr.get("town")
-            or addr.get("village")
-            or addr.get("municipality", "")
-        )
-        state = addr.get("state", "")
-        country = addr.get("country", "")
-
-        parts = [p for p in [city, state, country] if p]
-        name = ", ".join(parts) if parts else data.get("display_name", "")
-
-        if name:
-            _location_cache.update({"lat": lat, "lon": lon, "name": name})
-            queue_message(f"[LOCATION] Resolved: {name}")
-            return name
-
-    except Exception as e:
-        queue_message(f"[LOCATION] Reverse geocode failed: {e}")
-
-    return None
+from modules.module_geolocation import GEOLOCATION, resolve_location_name
 
 
 SIMILE_RE = re.compile(r"\blike a \w+", re.IGNORECASE)
@@ -172,22 +125,14 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
     if GEOLOCATION.get("lat") and GEOLOCATION.get("lon"):
         latitude = GEOLOCATION.get("lat")
         longitude = GEOLOCATION.get("lon")
-        resolved = _resolve_location_name(
-            latitude,
-            longitude,
-        )
-        if resolved:
-            location_line = (
-                f"Your current location: {resolved} ({latitude}, {longitude})"
-            )
-        else:
-            location_line = f"Your current coordinates: {latitude}, {longitude}"
+        loc_name = GEOLOCATION.get("location_name")
+        location_line = f"Your current location: {loc_name} ({latitude}, {longitude})"
     elif location_name:
         location_line = f"Your current location: {location_name}"
         if latitude and longitude:
             location_line += f" ({latitude}, {longitude})"
     elif latitude and longitude:
-        resolved = _resolve_location_name(latitude, longitude)
+        resolved = resolve_location_name(latitude, longitude)
         if resolved:
             location_line = (
                 f"Your current location: {resolved} ({latitude}, {longitude})"

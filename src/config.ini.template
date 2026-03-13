@@ -49,10 +49,10 @@ responses = ["Hi", "Yes?", "hey!", "What's up?", "Can I help you?", "What do you
 # what tars say before sending the call to llm (you can change these and add or remove new ones or use [] for none)
 thinking_responses = ["Let me think...", "soooo.....", "soo....", "Let's seeee...", "Let me seeee...", "Let's see.....", "One Moment...", "One Moment", "hum", "humm", "Analyzing...", "Checking...", "One moment...", "Working on it...", "Just a moment...", "Uh...",  "Uh", "Give me a second...", "Hold on..."]
 # what tars replies after detecting the wakeword (you can change these and add or remove new ones or use [] for none)
-latitude = 45.5017
-longitude = -73.5673
-location_name = Montreal, Quebec, Canada
-# location and coordinates so the llm know the position
+# latitude = 45.5017
+# longitude = -73.5673
+# location_name = Montreal, Quebec, Canada
+# You can set force a default location here, but it is recommended to let the geolocation module find the coordinates and location name for better accuracy in the prompts.
 
 
 [LLM] # Large Language Model configuration (OpenAI, Grok, Tabby, Ooba, or LOCAL)
@@ -180,7 +180,7 @@ fullscreen = True
 # fullscreen or within a framed window
 font_size = 12
 # normally from 9 to 20 depending on your resolution
-screensaver_timer = 300
+screensaver_timer = 180
 # 0 = no screensaver, 60 = 1 minute before screensaver shows up. You can specify any amount of seconds.
 screensaver_cycle_interval = 300
 # 60 = 1 minute before screensaver cycle to another one

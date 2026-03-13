@@ -239,6 +239,9 @@ if __name__ == "__main__":
     temp = cpu_temp.get_temperature()
     print(f"CPU Temperature: {temp:.1f}°C")
 
+    # === Geo Services Initialization ===
+    update_geo_location()
+    
     # === Initialize UI Manager ===
     if UI_AVAILABLE and show_ui and CONFIG["UI"]["UI_enabled"]:
         ui_manager = UIManager(
@@ -269,9 +272,6 @@ if __name__ == "__main__":
         char_greeting=char_manager.char_greeting,
         ui_manager=ui_manager,
     )
-
-    # === Geo Services Initialization ===
-    update_geo_location()
 
     # === STT Manager ===
     stt_manager = STTManager(
