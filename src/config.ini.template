@@ -180,7 +180,7 @@ fullscreen = True
 # fullscreen or within a framed window
 font_size = 12
 # normally from 9 to 20 depending on your resolution
-screensaver_timer = 300
+screensaver_timer = 180
 # 0 = no screensaver, 60 = 1 minute before screensaver shows up. You can specify any amount of seconds.
 screensaver_cycle_interval = 300
 # 60 = 1 minute before screensaver cycle to another one
