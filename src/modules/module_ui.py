@@ -255,34 +255,45 @@ class UIManager(threading.Thread):
                 self.terminal_system.set_camera_active(False)
 
     def display_dashboard(self):
-        app_state.screensaver_enabled = False  # Disable screensaver while dashboard is active
-        display_flags = pygame.DOUBLEBUF | pygame.OPENGL | pygame.FULLSCREEN
-        screen = pygame.display.set_mode((0, 0), display_flags)
-        actual_size = screen.get_size()
-        display_width = actual_size[0]
-        display_height = actual_size[1]
-        dashboard = DashboardAnimation(
-            screen,
-            display_width,
-            display_height,
-            show_time=True,
-        )
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if (
-                    event.type == pygame.QUIT
-                    or event.type == pygame.KEYDOWN
-                    or event.type == pygame.MOUSEBUTTONDOWN
-                ):
-                    running = False
+        try:
+            app_state.screensaver_enabled = (
+                False  # Disable screensaver while dashboard is active
+            )
+            app_state.dashboard_active = True
+            display_flags = pygame.DOUBLEBUF | pygame.OPENGL | pygame.FULLSCREEN
+            screen = pygame.display.set_mode((0, 0), display_flags)
+            actual_size = screen.get_size()
+            display_width = actual_size[0]
+            display_height = actual_size[1]
+            dashboard = DashboardAnimation(
+                screen,
+                display_width,
+                display_height,
+                show_time=True,
+            )
+            running = True
+            while running:
+                for event in pygame.event.get():
+                    if (
+                        event.type == pygame.QUIT
+                        or event.type == pygame.KEYDOWN
+                        or event.type == pygame.MOUSEBUTTONDOWN
+                    ):
+                        running = False
 
-            dashboard.update()
-            dashboard.render()
+                dashboard.update()
+                dashboard.render()
 
-        dashboard.cleanup()
-        self.screensaver_manager.reset_timer()
-        app_state.screensaver_enabled = True  # Re-enable screensaver after dashboard is closed
+            dashboard.cleanup()
+        except Exception as e:
+            print(f"ERROR: display_dashboard failed: {e}")
+        finally:
+            self.screensaver_manager.reset_timer()
+            app_state.screensaver_enabled = (
+                True  # Re-enable screensaver after dashboard is closed
+            )
+            app_state.dashboard_active = False
+
     def pause(self):
         self.paused = True
 
@@ -293,6 +304,10 @@ class UIManager(threading.Thread):
         """Deactivate the screensaver (called by wake word callback)."""
         if self.screensaver_manager:
             self.screensaver_manager.deactivate()
+
+        # deactivate dashboard if active
+        if app_state.dashboard_active:
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
 
     def exit_program(self):
         self.running = False
