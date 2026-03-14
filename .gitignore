@@ -167,7 +167,7 @@ TARS_topics.json
 character/persona.ini
 
 # Speech-to-text (STT) Folder (ignored except for specific file)
-# stt/
+stt/
 !stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 !stt/hey-bishop_en_raspberry-pi_v4_0_0.ppn
 
