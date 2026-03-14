@@ -193,6 +193,11 @@ character/
 !character/PLEX/images/neutral/
 !character/PLEX/images/neutral/** 
 
+!character/BISHOP/
+!character/BISHOP/images/
+!character/BISHOP/images/neutral/
+!character/BISHOP/images/neutral/**
+
 *.onnx
 *.onnx.json
 !TARS.onnx
@@ -203,6 +208,8 @@ character/
 !KIPP.onnx.json
 !PLEX.onnx
 !PLEX.onnx.json
+!BISHOP.onnx
+!BISHOP.onnx.json
 
 /src/modules/UI/pictures/*
 dashboard.ini
