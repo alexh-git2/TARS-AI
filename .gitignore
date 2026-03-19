@@ -199,6 +199,8 @@ character/
 !character/BISHOP/images/neutral/
 !character/BISHOP/images/neutral/**
 
+!character/JARVIS/*.ini
+
 *.onnx
 *.onnx.json
 !TARS.onnx

@@ -1174,7 +1174,8 @@ class STTManager:
             if character_path
             else "TARS"
         )
-        queue_message(f"{character_name}: [Standby Mode]")
+
+        self.ui_manager.update_data(character_name, "[Standby Mode]", character_name)
 
         self.interactions = 0
 
