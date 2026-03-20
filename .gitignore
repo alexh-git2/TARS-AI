@@ -276,3 +276,5 @@ src/modules/._module_websearch.py
 src/modules/._module_geolocation.py
 ._.gitignore
 TARS-AI.code-workspace
+src/memory/Bishop_topics.json
+src/memory/JARVIS_topics.json
