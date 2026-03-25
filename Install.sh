@@ -653,6 +653,11 @@ sherpa-onnx                     # Offline speech recognition (SenseVoiceTiny)
 # === ONNX RUNTIME FOR EMOTION DETECTION (Pi4/Pi5) ===
 optimum[onnxruntime]            # ONNX Runtime inference for emotion classifier
 
+# === PICOVOICE (Pi5) ====
+pvporcupine                     # Wake word detection by Picovoice
+pvrecorder                      # Recorder for Picovoice
+
+
 SHERPA
     fi
 
