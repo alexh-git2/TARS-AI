@@ -219,8 +219,6 @@ src/character/**
 !src/character/PLEX/**
 !src/character/Bishop/
 !src/character/Bishop/**
-!src/character/JARVIS/
-!src/character/JARVIS/**
 
 tarsdiscordbot/
 src/memory/prompt_history/
