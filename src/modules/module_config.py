@@ -418,6 +418,8 @@ def load_config():
             "speaker_id_threshold": config.get('STT', 'speaker_id_threshold', fallback='0.75'),
             "mic_amp_gain": config.getfloat('STT', 'mic_amp_gain', fallback=10.0),
             "silence_margin": config.getfloat('STT', 'silence_margin', fallback=3.0),
+            "picovoice_keyword_path": config["STT"]["picovoice_keyword_path"],
+            "picovoice_api_key": os.getenv("PICOVOICE_API_KEY"),
         },
         "CHAR": {
             "character_name": character_name,

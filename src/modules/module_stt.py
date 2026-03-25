@@ -45,24 +45,31 @@ get_stt_model = None
 OpenAI = None
 WakeWordSystem = None
 sherpa_onnx = None
+pvporcupine = None
+PvRecorder = None
 
 # Torch and related (Pi5 only for Silero VAD)
 if CAPABILITIES is None or CAPABILITIES.can_use_embeddings:
     try:
         import torch as _torch
+
         torch = _torch
     except ImportError:
         pass
     try:
         import librosa as _librosa
+
         librosa = _librosa
     except ImportError:
         pass
 
 # FastRTC (Pi5 only)
-if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "fastrtc" in CAPABILITIES.allowed_stt):
+if CAPABILITIES is None or (
+    CAPABILITIES.allowed_stt and "fastrtc" in CAPABILITIES.allowed_stt
+):
     try:
         from fastrtc import get_stt_model as _get_stt_model
+
         get_stt_model = _get_stt_model
     except ImportError:
         pass
@@ -70,54 +77,147 @@ if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "fastrtc" in CAPABILITI
 # OpenAI (all devices for cloud STT)
 try:
     from openai import OpenAI as _OpenAI
+
     OpenAI = _OpenAI
 except ImportError:
     pass
 
 # Atomik wake word (Pi5, Pi4, Pi3)
-if CAPABILITIES is None or (CAPABILITIES.allowed_wake and "atomik" in CAPABILITIES.allowed_wake):
+if CAPABILITIES is None or (
+    CAPABILITIES.allowed_wake and "atomik" in CAPABILITIES.allowed_wake
+):
     try:
         from modules.module_atomik import WakeWordSystem as _WakeWordSystem
+
         WakeWordSystem = _WakeWordSystem
     except ImportError:
         pass
 
 # Sherpa-ONNX (Pi5, Pi4)
-if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "sherpa-onnx" in CAPABILITIES.allowed_stt):
+if CAPABILITIES is None or (
+    CAPABILITIES.allowed_stt and "sherpa-onnx" in CAPABILITIES.allowed_stt
+):
     try:
         import sherpa_onnx as _sherpa_onnx
+
         sherpa_onnx = _sherpa_onnx
     except ImportError:
         pass
 
 # Pre-compiled regex for stripping SenseVoice tags (language: <|en|>, emotion: <|HAPPY|>, event: <|Speech|>, etc.)
-_SENSEVOICE_TAG_RE = re.compile(r'<\|[A-Za-z]+\|>')
-_NON_ALNUM_RE = re.compile(r'[^\w]')
-_NON_ALNUM_SPACE_RE = re.compile(r'[^a-zA-Z0-9\s]')
+_SENSEVOICE_TAG_RE = re.compile(r"<\|[A-Za-z]+\|>")
+_NON_ALNUM_RE = re.compile(r"[^\w]")
+_NON_ALNUM_SPACE_RE = re.compile(r"[^a-zA-Z0-9\s]")
 
 # Suppress parallelism warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Noise artifacts commonly produced by STT models for non-speech audio
-_NOISE_ARTIFACTS = frozenset({
-    'uh', 'um', 'hm', 'hmm', 'mm', 'mhm', 'ah', 'oh', 'eh',
-    'huh', 'ha', 'sh', 'shh', 'ss', 'tt', 'ts',
-})
+_NOISE_ARTIFACTS = frozenset(
+    {
+        "uh",
+        "um",
+        "hm",
+        "hmm",
+        "mm",
+        "mhm",
+        "ah",
+        "oh",
+        "eh",
+        "huh",
+        "ha",
+        "sh",
+        "shh",
+        "ss",
+        "tt",
+        "ts",
+    }
+)
 
 # Common filler/noise words for barge-in filtering
-_BARGEIN_NOISE_WORDS = frozenset({
-    '', 'a', 'i', 'uh', 'um', 'ah', 'oh', 'hm', 'hmm', 'mm',
-    'the', 'is', 'it', 'to', 'and', 'of', 'in', 'that', 'thats',
-    'an', 'or', 'so', 'do', 'no', 'my', 'me', 'we', 'he', 'she',
-    'be', 'at', 'by', 'if', 'up', 'as', 'on', 'you', 'not', 'but',
-    'can', 'got', 'has', 'had', 'was', 'are', 'for', 'too', 'its',
-    'all', 'his', 'her', 'him', 'our', 'who', 'how', 'did', 'get',
-    'let', 'may', 'new', 'now', 'old', 'one', 'out', 'own', 'say',
-    'set', 'try', 'two', 'way', 'yet', 'any', 'few', 'per', 'put',
-})
+_BARGEIN_NOISE_WORDS = frozenset(
+    {
+        "",
+        "a",
+        "i",
+        "uh",
+        "um",
+        "ah",
+        "oh",
+        "hm",
+        "hmm",
+        "mm",
+        "the",
+        "is",
+        "it",
+        "to",
+        "and",
+        "of",
+        "in",
+        "that",
+        "thats",
+        "an",
+        "or",
+        "so",
+        "do",
+        "no",
+        "my",
+        "me",
+        "we",
+        "he",
+        "she",
+        "be",
+        "at",
+        "by",
+        "if",
+        "up",
+        "as",
+        "on",
+        "you",
+        "not",
+        "but",
+        "can",
+        "got",
+        "has",
+        "had",
+        "was",
+        "are",
+        "for",
+        "too",
+        "its",
+        "all",
+        "his",
+        "her",
+        "him",
+        "our",
+        "who",
+        "how",
+        "did",
+        "get",
+        "let",
+        "may",
+        "new",
+        "now",
+        "old",
+        "one",
+        "out",
+        "own",
+        "say",
+        "set",
+        "try",
+        "two",
+        "way",
+        "yet",
+        "any",
+        "few",
+        "per",
+        "put",
+    }
+)
 
 # Global STT manager instance
 _stt_manager_instance = None
+
 
 def get_stt_manager():
     global _stt_manager_instance
@@ -126,7 +226,9 @@ def get_stt_manager():
 
 def _stt_dir():
     """Return the path to the stt models directory (src/stt/)."""
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "stt")
+    return os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "stt"
+    )
 
 
 class STTManager:
@@ -141,8 +243,8 @@ class STTManager:
     ]
 
     try:
-        _resp = CONFIG["CHAR"]['responses']
-        if _resp and _resp.strip() and _resp.strip() != '[]':
+        _resp = CONFIG["CHAR"]["responses"]
+        if _resp and _resp.strip() and _resp.strip() != "[]":
             _parsed = json.loads(_resp)
             if isinstance(_parsed, list) and _parsed:
                 WAKE_WORD_RESPONSES = _parsed
@@ -168,21 +270,25 @@ class STTManager:
         self.DEVICE_SAMPLE_RATE = get_native_rate()
         self.SAMPLE_RATE = self.DEVICE_SAMPLE_RATE  # backward compat alias
         if self.DEVICE_SAMPLE_RATE != self.MODEL_RATE:
-            queue_message(f"INFO: Mic native rate {self.DEVICE_SAMPLE_RATE} Hz — will resample to {self.MODEL_RATE} Hz")
+            queue_message(
+                f"INFO: Mic native rate {self.DEVICE_SAMPLE_RATE} Hz — will resample to {self.MODEL_RATE} Hz"
+            )
 
-        self.amp_gain = CONFIG['STT'].get('mic_amp_gain', 10.0)
-        self.silence_margin = CONFIG['STT'].get('silence_margin', 3.0)
+        self.amp_gain = CONFIG["STT"].get("mic_amp_gain", 10.0)
+        self.silence_margin = CONFIG["STT"].get("silence_margin", 3.0)
         self.wake_silence_threshold = None
         self.silence_threshold = None  # Updated after measuring background noise
         self.silence_threshold_margin = None
-        self.MAX_RECORDING_FRAMES = 100   # ~12.5 seconds
-        self.MAX_SILENT_FRAMES = CONFIG['STT']['speechdelay']
+        self.MAX_RECORDING_FRAMES = 100  # ~12.5 seconds
+        self.MAX_SILENT_FRAMES = CONFIG["STT"]["speechdelay"]
 
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None
         self.utterance_callback: Optional[Callable[[str], None]] = None
         self.post_utterance_callback: Optional[Callable[[], None]] = None
-        self.preemptive_llm_callback: Optional[Callable[[str], object]] = None  # fires LLM early
+        self.preemptive_llm_callback: Optional[Callable[[str], object]] = (
+            None  # fires LLM early
+        )
 
         # Wake word and model settings
         self.WAKE_WORD = config.get("STT", {}).get("wake_word", "hey tar").lower()
@@ -200,41 +306,56 @@ class STTManager:
         self.smart_turn_session = None
         self.smart_turn_extractor = None
         self.smart_turn_audio_buffer = deque(maxlen=32)
-        self._smart_turn_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SmartTurn")
+        self._smart_turn_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="SmartTurn"
+        )
         self._smart_turn_future = None  # pending inference Future
         self._smart_turn_last_buf_len = 0  # buffer size at last inference submission
 
         # Barge-in monitoring
         self._bargein_active = False
         self._bargein_thread = None
-        self._bargein_tts_data = {'word_list': [], 'words_all': set()}  # shared with monitor thread
-        self._bargein_enabled = CONFIG['STT'].get('enable_bargein', True)
+        self._bargein_tts_data = {
+            "word_list": [],
+            "words_all": set(),
+        }  # shared with monitor thread
+        self._bargein_enabled = CONFIG["STT"].get("enable_bargein", True)
         if isinstance(self._bargein_enabled, str):
-            self._bargein_enabled = self._bargein_enabled.lower() in ('true', '1', 'yes')
-        self._bargein_mode = CONFIG['STT'].get('bargein_mode', 'fuzzy')
-        sensitivity = max(1, min(10, int(CONFIG['STT'].get('bargein_sensitivity', 5))))
-        t = (sensitivity - 1) / 9.0  # 0.0 (sens=1, hard to interrupt) to 1.0 (sens=10, easy)
+            self._bargein_enabled = self._bargein_enabled.lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+        self._bargein_mode = CONFIG["STT"].get("bargein_mode", "fuzzy")
+        sensitivity = max(1, min(10, int(CONFIG["STT"].get("bargein_sensitivity", 5))))
+        t = (
+            sensitivity - 1
+        ) / 9.0  # 0.0 (sens=1, hard to interrupt) to 1.0 (sens=10, easy)
         # RMS gate: higher sensitivity = lower multiplier on silence_threshold
         # sens=1: 1.0x (same as normal), sens=10: 0.4x (very sensitive)
         self._bargein_rms_scale = 1.0 - t * 0.6
         # Fuzzy mode: higher sensitivity = lower threshold = fewer words matched as echo
-        self._bargein_broad_threshold = 0.80 - t * 0.10   # 0.80 (sens=1) to 0.70 (sens=10)
+        self._bargein_broad_threshold = (
+            0.80 - t * 0.10
+        )  # 0.80 (sens=1) to 0.70 (sens=10)
         self._bargein_min_novel = 3 if sensitivity <= 3 else 2
         # Voiceprint mode: higher sensitivity = lower confidence required to match
         # Bleed scores 0.50-0.65, mixed voice+bleed scores 0.58-0.82
-        self._bargein_voiceprint_threshold = 0.90 - t * 0.25  # 0.90 (sens=1) to 0.65 (sens=10)
+        self._bargein_voiceprint_threshold = (
+            0.90 - t * 0.25
+        )  # 0.90 (sens=1) to 0.65 (sens=10)
 
         # Last recorded audio for speaker ID (set by transcription backends)
         self._last_audio_float32 = None
 
         # Cache progress bar, webui port, and character name so they aren't recreated per frame
         self._progress_bar_funcs = None
-        self._webui_port = CONFIG['ACCESS'].get('webui_port', 80)
+        self._webui_port = CONFIG["ACCESS"].get("webui_port", 80)
         self._character_name = self._resolve_character_name()
 
         self.DEBUG = False
         self._initialize_models()
-        self.vadmethod = CONFIG['STT']['vad_method']
+        self.vadmethod = CONFIG["STT"]["vad_method"]
 
     # === Initialization ===
 
@@ -263,12 +384,14 @@ class STTManager:
             self._load_atomik_model()
         elif wake_proc == "sherpa-onnx" and not self.sherpa_recognizer:
             self._load_sherpa_onnx_model()
+        elif wake_proc == "picovoice" and pvporcupine is not None:
+            self._load_picovoice_model()
 
         if self.config["STT"].get("vad_enabled", False):
             self._load_silero_vad()
 
         # Load VAD model if needed
-        vad_method = CONFIG['STT'].get('vad_method', 'rms')
+        vad_method = CONFIG["STT"].get("vad_method", "rms")
         if vad_method == "sherpa-onnx":
             self._load_sherpa_vad()
         elif vad_method == "smart-turn":
@@ -285,7 +408,9 @@ class STTManager:
 
     def start(self):
         self.running = True
-        self.thread = threading.Thread(target=self._stt_processing_loop, name="STTThread", daemon=True)
+        self.thread = threading.Thread(
+            target=self._stt_processing_loop, name="STTThread", daemon=True
+        )
         self.thread.start()
 
     def stop(self):
@@ -323,8 +448,8 @@ class STTManager:
         if WakeWordSystem is None:
             queue_message("WARNING: Atomik wake word not available")
             return
-        atomik_mode = CONFIG['STT'].get('atomik_mode', 'auto').strip().lower()
-        mode = None if atomik_mode == 'auto' else atomik_mode
+        atomik_mode = CONFIG["STT"].get("atomik_mode", "auto").strip().lower()
+        mode = None if atomik_mode == "auto" else atomik_mode
         WakeWordSystem(self.WAKE_WORD, mode=mode).createModel()
 
     def _load_silero_model(self):
@@ -341,9 +466,17 @@ class STTManager:
             torch.hub.get_dir = lambda: stt_folder
 
             self.silero_model, self.decoder, self.utils = torch.hub.load(
-                "snakers4/silero-models", model="silero_stt", language="en", device="cpu"
+                "snakers4/silero-models",
+                model="silero_stt",
+                language="en",
+                device="cpu",
             )
-            self.read_batch, self.split_into_batches, self.read_audio, self.prepare_model_input = self.utils
+            (
+                self.read_batch,
+                self.split_into_batches,
+                self.read_audio,
+                self.prepare_model_input,
+            ) = self.utils
             queue_message("INFO: Silero model loaded successfully.")
         except Exception as e:
             queue_message(f"ERROR: Failed to load Silero model: {e}")
@@ -355,6 +488,7 @@ class STTManager:
             return
         try:
             from silero_vad import load_silero_vad, get_speech_timestamps
+
             self.silero_vad_model = load_silero_vad(onnx=False)
             self.get_speech_timestamps = get_speech_timestamps
             queue_message("INFO: Silero VAD loaded successfully.")
@@ -378,7 +512,9 @@ class STTManager:
             queue_message("WARNING: sherpa-onnx not available (not installed)")
             return
         try:
-            model_path = os.path.join(_stt_dir(), "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17")
+            model_path = os.path.join(
+                _stt_dir(), "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+            )
             model_file = os.path.join(model_path, "model.int8.onnx")
             tokens_file = os.path.join(model_path, "tokens.txt")
 
@@ -391,12 +527,26 @@ class STTManager:
             threads = 4 if pi_version == "pi5" else 2
 
             self.sherpa_recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
-                model=model_file, tokens=tokens_file, num_threads=threads, use_itn=True, debug=False,
+                model=model_file,
+                tokens=tokens_file,
+                num_threads=threads,
+                use_itn=True,
+                debug=False,
             )
             queue_message("INFO: sherpa-onnx SenseVoiceTiny model loaded successfully.")
         except Exception as e:
             queue_message(f"ERROR: Failed to load sherpa-onnx model: {e}")
             self.sherpa_recognizer = None
+
+    def _load_picovoice_model(self):
+        if pvporcupine is None:
+            queue_message("WARNING: Picovoice not available, wake word disabled")
+            return
+
+        self.porcupine = pvporcupine.create(
+            access_key=CONFIG["STT"]["picovoice_api_key"],
+            keyword_paths=[CONFIG["STT"]["picovoice_keyword_path"]],
+        )
 
     def _load_sherpa_vad(self):
         if sherpa_onnx is None:
@@ -415,7 +565,9 @@ class STTManager:
             vad_config.silero_vad.min_silence_duration = 0.3
             vad_config.sample_rate = 16000
 
-            self.sherpa_vad = sherpa_onnx.VoiceActivityDetector(vad_config, buffer_size_in_seconds=30)
+            self.sherpa_vad = sherpa_onnx.VoiceActivityDetector(
+                vad_config, buffer_size_in_seconds=30
+            )
             queue_message("INFO: sherpa-onnx Silero VAD loaded successfully.")
         except Exception as e:
             queue_message(f"ERROR: Failed to load sherpa-onnx VAD: {e}")
@@ -447,7 +599,8 @@ class STTManager:
             return
         try:
             model_dir = os.path.join(
-                _stt_dir(), "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12"
+                _stt_dir(),
+                "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12",
             )
             if not os.path.isdir(model_dir):
                 queue_message(f"ERROR: Punctuation model not found at {model_dir}")
@@ -487,7 +640,9 @@ class STTManager:
             self._smart_turn_infer(dummy)
             queue_message("INFO: Smart Turn v3.2 model loaded and pre-warmed.")
         except ImportError as e:
-            queue_message(f"ERROR: Smart Turn requires onnxruntime and transformers: {e}")
+            queue_message(
+                f"ERROR: Smart Turn requires onnxruntime and transformers: {e}"
+            )
             self.smart_turn_session = None
             self.smart_turn_extractor = None
         except Exception as e:
@@ -541,6 +696,7 @@ class STTManager:
     def play_wav(self, filename):
         try:
             from modules.module_tts import _resolve_output_device, _output_device
+
             _resolve_output_device()
             data, sr = sf.read(filename)
             sd.play(data * 0.5, samplerate=sr, device=_output_device)
@@ -558,8 +714,13 @@ class STTManager:
 
     # === Shared Recording ===
 
-    def _record_audio_chunks(self, use_pre_roll=True, min_speech_frames=5,
-                             pre_roll_frames=10, vad_method=None):
+    def _record_audio_chunks(
+        self,
+        use_pre_roll=True,
+        min_speech_frames=5,
+        pre_roll_frames=10,
+        vad_method=None,
+    ):
         """Record audio until end-of-speech detected.
 
         Returns (audio_chunks, speech_frames) where audio_chunks is a list of
@@ -579,7 +740,9 @@ class STTManager:
         vad_dispatch = {
             "silero": self._is_silence_detected_silero,
             "sherpa-onnx": self._is_silence_detected_sherpa_onnx,
-            "smart-turn": self._is_silence_detected_smart_turn if self.smart_turn_session is not None else self._is_silence_detected_rms,
+            "smart-turn": self._is_silence_detected_smart_turn
+            if self.smart_turn_session is not None
+            else self._is_silence_detected_rms,
         }
         vad_func = vad_dispatch.get(vad_method, self._is_silence_detected_rms)
 
@@ -591,6 +754,7 @@ class STTManager:
             # Flush stale mic audio that may contain the robot's own TTS voice.
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
+
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
                     mic.flush()
@@ -606,7 +770,9 @@ class STTManager:
                     set_tars_state(TarsState.STANDBY)
                     return None, 0
 
-                is_silence, detected_speech, silent_frames = vad_func(data, detected_speech, silent_frames)
+                is_silence, detected_speech, silent_frames = vad_func(
+                    data, detected_speech, silent_frames
+                )
 
                 # Pre-speech timeout: if no speech detected and silence exceeds threshold, exit early
                 if not detected_speech and silent_frames >= max_silent:
@@ -615,15 +781,24 @@ class STTManager:
                     return None, 0
 
                 # Post-speech: VAD signaled end of turn
-                if is_silence and detected_speech and speech_frames >= min_speech_frames:
+                if (
+                    is_silence
+                    and detected_speech
+                    and speech_frames >= min_speech_frames
+                ):
                     _, clear_bar = self._get_progress_bar()
                     clear_bar()
                     break
 
                 # Smart Turn early exit — buffer is empty when inference signaled turn-complete
                 active_vad = vad_method or self.vadmethod
-                if (is_silence and active_vad == "smart-turn" and speech_frames >= min_speech_frames
-                        and silent_frames >= 3 and not self.smart_turn_audio_buffer):
+                if (
+                    is_silence
+                    and active_vad == "smart-turn"
+                    and speech_frames >= min_speech_frames
+                    and silent_frames >= 3
+                    and not self.smart_turn_audio_buffer
+                ):
                     queue_message("INFO: Smart Turn detected end of turn")
                     break
 
@@ -651,7 +826,11 @@ class STTManager:
         # may contain TARS's own TTS response (using the user's voice model),
         # contaminating the speaker embedding with the wrong voice.
         speech_only = audio_chunks[pre_roll_added:] if pre_roll_added else audio_chunks
-        self._last_audio_float32 = self._chunks_to_float32(speech_only) if speech_only else self._chunks_to_float32(audio_chunks)
+        self._last_audio_float32 = (
+            self._chunks_to_float32(speech_only)
+            if speech_only
+            else self._chunks_to_float32(audio_chunks)
+        )
         return audio_chunks, speech_frames
 
     def _chunks_to_wav_buffer(self, chunks, sample_rate):
@@ -689,6 +868,7 @@ class STTManager:
         if self._last_audio_float32 is not None:
             try:
                 from modules.module_speaker_id import get_speaker_id_manager
+
                 sid = get_speaker_id_manager()
                 if sid is not None:
                     sid.submit_audio(self._last_audio_float32, 16000)
@@ -708,7 +888,7 @@ class STTManager:
         if not text:
             return False
         # Strip punctuation/symbols to get only alphanumeric characters
-        cleaned = _NON_ALNUM_RE.sub('', text)
+        cleaned = _NON_ALNUM_RE.sub("", text)
         # Require at least 2 meaningful characters
         if len(cleaned) < 2:
             return False
@@ -758,20 +938,23 @@ class STTManager:
             processor = self.config["STT"].get("stt_processor", "fastrtc")
             transcribe_fn = processors.get(processor)
             if transcribe_fn is None:
-                queue_message(f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC")
+                queue_message(
+                    f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC"
+                )
                 transcribe_fn = self._transcribe_with_fastrtc
 
             import modules.module_speed as speed
-            speed.start('stt')
+
+            speed.start("stt")
             result = transcribe_fn()
-            stt_dur = speed.stop('stt')
+            stt_dur = speed.stop("stt")
 
             # Speaker ID submission now happens inside _emit_result() so it
             # runs BEFORE utterance_callback blocks for the full LLM/TTS pipeline.
 
             if result:
                 speed.log(f"stt:{processor}({speed.fmt(stt_dur)})")
-                speed.start('stt_to_llm')  # Measure gap from STT done to LLM start
+                speed.start("stt_to_llm")  # Measure gap from STT done to LLM start
 
             if self.post_utterance_callback and result:
                 self.post_utterance_callback()
@@ -786,27 +969,29 @@ class STTManager:
         """Build speaker + presence gate dependencies. Used by all wake word engines.
         Returns (speaker_id_mgr, speaker_mode, speaker_threshold, presence_mode, identity_mgr).
         """
-        stt_cfg = CONFIG.get('STT', {})
+        stt_cfg = CONFIG.get("STT", {})
         speaker_id_mgr = None
-        speaker_mode = 'any'
+        speaker_mode = "any"
         speaker_threshold = 0.60
-        presence_mode = 'off'
+        presence_mode = "off"
         identity_mgr = None
 
-        raw_speaker = stt_cfg.get('vad_speaker_verify', 'off').strip().lower()
-        if raw_speaker != 'off':
+        raw_speaker = stt_cfg.get("vad_speaker_verify", "off").strip().lower()
+        if raw_speaker != "off":
             try:
                 from modules.module_speaker_id import get_speaker_id_manager
+
                 speaker_id_mgr = get_speaker_id_manager()
                 speaker_mode = raw_speaker
-                speaker_threshold = float(stt_cfg.get('vad_speaker_threshold', '0.60'))
+                speaker_threshold = float(stt_cfg.get("vad_speaker_threshold", "0.60"))
             except Exception:
                 pass
 
-        raw_presence = stt_cfg.get('vad_presence_gate', 'off').strip().lower()
-        if raw_presence in ('any', 'known'):
+        raw_presence = stt_cfg.get("vad_presence_gate", "off").strip().lower()
+        if raw_presence in ("any", "known"):
             try:
                 from modules.module_identity import get_identity_manager
+
                 identity_mgr = get_identity_manager()
                 if identity_mgr is not None:
                     presence_mode = raw_presence
@@ -814,63 +999,93 @@ class STTManager:
             except Exception:
                 pass
 
-        return speaker_id_mgr, speaker_mode, speaker_threshold, presence_mode, identity_mgr
+        return (
+            speaker_id_mgr,
+            speaker_mode,
+            speaker_threshold,
+            presence_mode,
+            identity_mgr,
+        )
 
-    def _run_wake_gates(self, audio_float32: np.ndarray, transcript_verify_fn=None) -> bool:
+    def _run_wake_gates(
+        self, audio_float32: np.ndarray, transcript_verify_fn=None
+    ) -> bool:
         """Run post-detection gates synchronously after wake word is detected.
         Returns True if all enabled gates pass (or have no applicable speakers/faces enrolled).
         transcript_verify_fn: optional callable(audio, rate)->str for transcript verification gate.
         """
-        speaker_id_mgr, speaker_mode, speaker_threshold, presence_mode, identity_mgr = \
+        speaker_id_mgr, speaker_mode, speaker_threshold, presence_mode, identity_mgr = (
             self._build_wake_gates()
+        )
 
         # Speaker gate
         if speaker_id_mgr is not None:
             try:
                 enrolled = speaker_id_mgr.get_enrolled_speakers()
-                named = [s for s in enrolled if not s.startswith('Unknown_')]
-                target = None if speaker_mode == 'any' else speaker_mode.lower()
-                applicable = named if target is None else [s for s in named if s.lower() == target]
+                named = [s for s in enrolled if not s.startswith("Unknown_")]
+                target = None if speaker_mode == "any" else speaker_mode.lower()
+                applicable = (
+                    named
+                    if target is None
+                    else [s for s in named if s.lower() == target]
+                )
                 if applicable and len(audio_float32) >= int(self.MODEL_RATE * 0.5):
-                    emb = speaker_id_mgr.extract_embedding(audio_float32, self.MODEL_RATE)
+                    emb = speaker_id_mgr.extract_embedding(
+                        audio_float32, self.MODEL_RATE
+                    )
                     if emb is not None:
-                        best_name, best_score = speaker_id_mgr.identify_speaker(emb, skip_margin=True)
-                        if best_name and best_name.startswith('Unknown_'):
-                            best_name = ''
-                        passed = (best_name and best_score >= speaker_threshold and
-                                  (target is None or best_name.lower() == target))
+                        best_name, best_score = speaker_id_mgr.identify_speaker(
+                            emb, skip_margin=True
+                        )
+                        if best_name and best_name.startswith("Unknown_"):
+                            best_name = ""
+                        passed = (
+                            best_name
+                            and best_score >= speaker_threshold
+                            and (target is None or best_name.lower() == target)
+                        )
                         if not passed:
                             if self.DEBUG:
-                                queue_message(f"DEBUG: Wake gate REJECT speaker: '{best_name}' score={best_score:.3f}")
+                                queue_message(
+                                    f"DEBUG: Wake gate REJECT speaker: '{best_name}' score={best_score:.3f}"
+                                )
                             return False
             except Exception:
                 pass
 
         # Presence gate
-        if presence_mode != 'off' and identity_mgr is not None:
+        if presence_mode != "off" and identity_mgr is not None:
             try:
                 faces = identity_mgr.get_recognized_faces()
                 if not faces:
                     if self.DEBUG:
-                        queue_message("DEBUG: Wake gate REJECT presence: no faces detected")
+                        queue_message(
+                            "DEBUG: Wake gate REJECT presence: no faces detected"
+                        )
                     return False
-                if presence_mode == 'known':
-                    known = [f for f in faces if f.get('name', 'UNKNOWN') != 'UNKNOWN']
+                if presence_mode == "known":
+                    known = [f for f in faces if f.get("name", "UNKNOWN") != "UNKNOWN"]
                     if not known:
                         if self.DEBUG:
-                            queue_message("DEBUG: Wake gate REJECT presence: no known faces")
+                            queue_message(
+                                "DEBUG: Wake gate REJECT presence: no known faces"
+                            )
                         return False
             except Exception:
                 pass
 
         # Transcript verify gate
-        if transcript_verify_fn is not None and audio_float32 is not None and len(audio_float32) > 0:
+        if (
+            transcript_verify_fn is not None
+            and audio_float32 is not None
+            and len(audio_float32) > 0
+        ):
             try:
                 text = transcript_verify_fn(audio_float32, self.MODEL_RATE)
                 if text:
-                    words = _NON_ALNUM_SPACE_RE.sub('', text.lower()).split()
-                    wake_words = _NON_ALNUM_RE.sub('', self.WAKE_WORD.lower()).split()
-                    joined = ' '.join(words)
+                    words = _NON_ALNUM_SPACE_RE.sub("", text.lower()).split()
+                    wake_words = _NON_ALNUM_RE.sub("", self.WAKE_WORD.lower()).split()
+                    joined = " ".join(words)
                     # Accept if any wake word token appears or fuzzy match passes
                     exact = any(w in words for w in wake_words)
                     fuzzy = self._fuzzy_wake_word_match(joined, self.WAKE_WORD)
@@ -892,35 +1107,39 @@ class STTManager:
         Remote processors (openai, external) fall back to whichever local model is loaded.
         Returns None if no suitable model is available (gate will be skipped).
         """
-        stt_proc = self.config.get('STT', {}).get('stt_processor', '')
+        stt_proc = self.config.get("STT", {}).get("stt_processor", "")
 
         # Pick the best model: prefer primary when it's a local processor, else take whatever is loaded
-        if stt_proc == 'sherpa-onnx':
+        if stt_proc == "sherpa-onnx":
             recognizer, fastrtc = self.sherpa_recognizer, None
-        elif stt_proc == 'fastrtc':
+        elif stt_proc == "fastrtc":
             recognizer, fastrtc = None, self.fastrtc_model
         else:
             recognizer, fastrtc = self.sherpa_recognizer, self.fastrtc_model
 
         if recognizer is not None:
+
             def _fn(audio_float32, sample_rate):
                 try:
                     s = recognizer.create_stream()
                     s.accept_waveform(sample_rate, audio_float32)
                     recognizer.decode_stream(s)
-                    text = _SENSEVOICE_TAG_RE.sub('', s.result.text).strip()
+                    text = _SENSEVOICE_TAG_RE.sub("", s.result.text).strip()
                     del s
                     return text or None
                 except Exception:
                     return None
+
             return _fn
 
         if fastrtc is not None:
+
             def _fn(audio_float32, sample_rate):
                 try:
                     return fastrtc.stt((sample_rate, audio_float32)).strip() or None
                 except Exception:
                     return None
+
             return _fn
 
         queue_message(
@@ -961,7 +1180,9 @@ class STTManager:
         wav_buf = self._chunks_to_wav_buffer(chunks, self.MODEL_RATE)
         audio_data, sr = sf.read(wav_buf, dtype="float32")
         if sr != self.DEFAULT_SAMPLE_RATE and librosa is not None:
-            audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=self.DEFAULT_SAMPLE_RATE)
+            audio_data = librosa.resample(
+                audio_data, orig_sr=sr, target_sr=self.DEFAULT_SAMPLE_RATE
+            )
 
         input_audio = self.prepare_model_input([torch.tensor(audio_data)], device="cpu")
         silero_output = self.silero_model(input_audio)[0]
@@ -977,29 +1198,34 @@ class STTManager:
                     queue_message("DEBUG STT: No speech recorded (silence timeout)")
                 return None
 
-            external_url = self.config['STT'].get('external_url', '')
+            external_url = self.config["STT"].get("external_url", "")
             if self.DEBUG:
                 total_samples = sum(len(c) for c in chunks)
-                queue_message(f"DEBUG STT: Sending {total_samples} samples to {external_url}/save_audio")
+                queue_message(
+                    f"DEBUG STT: Sending {total_samples} samples to {external_url}/save_audio"
+                )
 
             wav_buf = self._chunks_to_wav_buffer(chunks, self.MODEL_RATE)
             files = {"audio": ("audio.wav", wav_buf, "audio/wav")}
             headers = {}
-            api_key = os.environ.get('EXTERNAL_API_KEY', '')
+            api_key = os.environ.get("EXTERNAL_API_KEY", "")
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
             response = requests.post(
-                f"{external_url}/save_audio",
-                files=files, headers=headers, timeout=10
+                f"{external_url}/save_audio", files=files, headers=headers, timeout=10
             )
             if response.status_code != 200:
-                queue_message(f"ERROR: Server STT returned {response.status_code}: {response.text[:200]}")
+                queue_message(
+                    f"ERROR: Server STT returned {response.status_code}: {response.text[:200]}"
+                )
                 return None
 
             transcription = response.json().get("transcription", [])
             if not transcription:
                 if self.DEBUG:
-                    queue_message("DEBUG STT: Server returned empty transcription (VAD filtered or no speech)")
+                    queue_message(
+                        "DEBUG STT: Server returned empty transcription (VAD filtered or no speech)"
+                    )
                 return None
 
             raw_text = transcription[0].get("text", "").strip()
@@ -1007,8 +1233,12 @@ class STTManager:
                 queue_message(f"DEBUG STT: Server transcribed: '{raw_text}'")
             extra = {
                 "result": [
-                    {"conf": 1.0, "start": seg.get("start", 0),
-                     "end": seg.get("end", 0), "word": seg.get("text", "")}
+                    {
+                        "conf": 1.0,
+                        "start": seg.get("start", 0),
+                        "end": seg.get("end", 0),
+                        "word": seg.get("text", ""),
+                    }
                     for seg in transcription
                 ]
             }
@@ -1019,7 +1249,7 @@ class STTManager:
 
     def _transcribe_with_openai(self):
         """Transcribe and translate audio using OpenAI's Whisper API."""
-        language = CONFIG['STT']['language']
+        language = CONFIG["STT"]["language"]
         client = OpenAI(api_key=CONFIG["TTS"]["openai_api_key"])
 
         RATE = 16000
@@ -1038,14 +1268,14 @@ class STTManager:
         # Save to temporary WAV file (OpenAI requires a file)
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
-            with wave.open(tmp_path, 'wb') as wf:
+            with wave.open(tmp_path, "wb") as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
                 wf.setframerate(RATE)
                 wf.writeframes(audio_data.tobytes())
 
         try:
-            with open(tmp_path, 'rb') as f:
+            with open(tmp_path, "rb") as f:
                 response = client.audio.transcriptions.create(
                     model="whisper-1", file=f, response_format="verbose_json"
                 )
@@ -1053,16 +1283,17 @@ class STTManager:
             os.unlink(tmp_path)
 
         # Check no_speech_prob — reject if Whisper thinks there's no real speech
-        if hasattr(response, 'segments') and response.segments:
+        if hasattr(response, "segments") and response.segments:
             avg_no_speech = sum(
-                seg.get('no_speech_prob', 0) if isinstance(seg, dict)
-                else getattr(seg, 'no_speech_prob', 0)
+                seg.get("no_speech_prob", 0)
+                if isinstance(seg, dict)
+                else getattr(seg, "no_speech_prob", 0)
                 for seg in response.segments
             ) / len(response.segments)
             if avg_no_speech > 0.5:
                 return None
 
-        transcription = response.text.strip() if hasattr(response, 'text') else ""
+        transcription = response.text.strip() if hasattr(response, "text") else ""
         if not transcription:
             return None
 
@@ -1071,9 +1302,12 @@ class STTManager:
             translation = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": f"Translate the following text to {language}. Only provide the translation, nothing else."},
-                    {"role": "user", "content": transcription}
-                ]
+                    {
+                        "role": "system",
+                        "content": f"Translate the following text to {language}. Only provide the translation, nothing else.",
+                    },
+                    {"role": "user", "content": transcription},
+                ],
             )
             transcription = translation.choices[0].message.content
 
@@ -1090,7 +1324,7 @@ class STTManager:
             s.accept_waveform(sample_rate, audio_data)
             self.sherpa_recognizer.decode_stream(s)
             transcript = s.result.text.strip()
-            transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
+            transcript = _SENSEVOICE_TAG_RE.sub("", transcript).strip()
             transcript = self._add_punctuation(transcript)
             del s
             return transcript
@@ -1106,7 +1340,7 @@ class STTManager:
         words = text.split()
         if len(words) < 2:
             return False
-        return text[-1] in '.!?' or len(words) >= 5
+        return text[-1] in ".!?" or len(words) >= 5
 
     def _transcribe_with_sherpa_onnx(self):
         """Transcribe with sherpa-onnx using speculative pre-transcription and preemptive LLM."""
@@ -1136,7 +1370,9 @@ class STTManager:
 
         # Preemptive LLM generation — fired when spec transcript looks like a complete sentence
         preemptive_thread = None
-        preemptive_thread_ref = [None]  # Persistent ref — survives invalidation for join at end
+        preemptive_thread_ref = [
+            None
+        ]  # Persistent ref — survives invalidation for join at end
         preemptive_result = [None]  # Mutable container for LLM result
         preemptive_transcript = [None]  # The transcript the LLM was fired with
         preemptive_fired = False
@@ -1166,7 +1402,9 @@ class STTManager:
         self._smart_turn_future = None
         self._smart_turn_last_buf_len = 0
         if had_stale_future or had_stale_buffer:
-            queue_message(f"DEBUG: Reset stale Smart Turn state (future={had_stale_future}, buf_chunks={had_stale_buffer})")
+            queue_message(
+                f"DEBUG: Reset stale Smart Turn state (future={had_stale_future}, buf_chunks={had_stale_buffer})"
+            )
 
         with ResamplingInputStream(dtype="int16") as mic:
             # Flush stale mic audio that may contain the robot's own TTS voice.
@@ -1174,6 +1412,7 @@ class STTManager:
             # the LLM+TTS pipeline took many seconds before we get here.
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
+
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
                     mic.flush()
@@ -1192,14 +1431,18 @@ class STTManager:
                     set_tars_state(TarsState.STANDBY)
                     return None, 0
 
-                is_silence, detected_speech, silent_frames = vad_func(data, detected_speech, silent_frames)
+                is_silence, detected_speech, silent_frames = vad_func(
+                    data, detected_speech, silent_frames
+                )
 
                 # Pre-speech timeout: if no speech detected and silence exceeds threshold, exit early
                 if not detected_speech and silent_frames >= MAX_SILENT:
                     _, clear_bar = self._get_progress_bar()
                     clear_bar()
                     if self.DEBUG:
-                        queue_message(f"DEBUG: Recording exit: pre-speech timeout (no speech after {silent_frames} silent frames)")
+                        queue_message(
+                            f"DEBUG: Recording exit: pre-speech timeout (no speech after {silent_frames} silent frames)"
+                        )
                     return None
 
                 if is_silence:
@@ -1207,13 +1450,21 @@ class STTManager:
                         _, clear_bar = self._get_progress_bar()
                         clear_bar()
                         if self.DEBUG:
-                            queue_message(f"DEBUG: Recording exit: silence timeout (speech={speech_frames}, silent={silent_frames}, chunks={len(audio_chunks)})")
+                            queue_message(
+                                f"DEBUG: Recording exit: silence timeout (speech={speech_frames}, silent={silent_frames}, chunks={len(audio_chunks)})"
+                            )
                         break
                     # Smart Turn can signal turn-complete with fewer silent frames
                     # (it clears its audio buffer when prob > 0.5, so check that)
-                    if (self.vadmethod == "smart-turn" and speech_frames >= MIN_SPEECH
-                            and silent_frames >= 3 and not self.smart_turn_audio_buffer):
-                        queue_message(f"INFO: Smart Turn detected end of turn (speech={speech_frames}, silent={silent_frames}, chunks={len(audio_chunks)})")
+                    if (
+                        self.vadmethod == "smart-turn"
+                        and speech_frames >= MIN_SPEECH
+                        and silent_frames >= 3
+                        and not self.smart_turn_audio_buffer
+                    ):
+                        queue_message(
+                            f"INFO: Smart Turn detected end of turn (speech={speech_frames}, silent={silent_frames}, chunks={len(audio_chunks)})"
+                        )
                         break
 
                 if not detected_speech:
@@ -1241,8 +1492,13 @@ class STTManager:
                             preemptive_fired = False
 
                 # Kick off speculative transcription on first silence after speech
-                if (detected_speech and silent_frames >= 3 and speech_frames >= MIN_SPEECH
-                        and spec_thread is None and audio_chunks):
+                if (
+                    detected_speech
+                    and silent_frames >= 3
+                    and speech_frames >= MIN_SPEECH
+                    and spec_thread is None
+                    and audio_chunks
+                ):
                     spec_snapshot_len = len(audio_chunks)
                     spec_thread = threading.Thread(
                         target=_spec_transcribe, args=(list(audio_chunks),), daemon=True
@@ -1250,10 +1506,13 @@ class STTManager:
                     spec_thread.start()
 
                 # Check if speculative transcript is ready and fire preemptive LLM
-                if (spec_thread is not None and not preemptive_fired
-                        and self.preemptive_llm_callback is not None
-                        and spec_result[0] is not None
-                        and self._looks_like_complete_sentence(spec_result[0])):
+                if (
+                    spec_thread is not None
+                    and not preemptive_fired
+                    and self.preemptive_llm_callback is not None
+                    and spec_result[0] is not None
+                    and self._looks_like_complete_sentence(spec_result[0])
+                ):
                     preemptive_transcript[0] = spec_result[0]
                     preemptive_fired = True
                     preemptive_thread = threading.Thread(
@@ -1262,11 +1521,15 @@ class STTManager:
                     preemptive_thread_ref[0] = preemptive_thread
                     preemptive_thread.start()
                     if self.DEBUG:
-                        queue_message(f"DEBUG: Preemptive LLM fired for: {spec_result[0][:60]}...")
+                        queue_message(
+                            f"DEBUG: Preemptive LLM fired for: {spec_result[0][:60]}..."
+                        )
 
             if speech_frames < MIN_SPEECH:
                 if self.DEBUG:
-                    queue_message(f"DEBUG: Recording discarded: not enough speech ({speech_frames}<{MIN_SPEECH})")
+                    queue_message(
+                        f"DEBUG: Recording discarded: not enough speech ({speech_frames}<{MIN_SPEECH})"
+                    )
                 return None
 
         if not audio_chunks:
@@ -1276,7 +1539,11 @@ class STTManager:
         # may contain TARS's own TTS response (using the user's voice model),
         # contaminating the speaker embedding with the wrong voice.
         speech_only = audio_chunks[pre_roll_added:] if pre_roll_added else audio_chunks
-        self._last_audio_float32 = self._chunks_to_float32(speech_only) if speech_only else self._chunks_to_float32(audio_chunks)
+        self._last_audio_float32 = (
+            self._chunks_to_float32(speech_only)
+            if speech_only
+            else self._chunks_to_float32(audio_chunks)
+        )
 
         # Check if speculative transcription covers all audio
         if spec_thread is not None and spec_snapshot_len == len(audio_chunks):
@@ -1285,26 +1552,38 @@ class STTManager:
         else:
             # More audio came after the snapshot — do a full transcription
             if spec_thread is not None:
-                spec_thread.join(timeout=5)  # Wait for it to finish to avoid concurrent native calls
+                spec_thread.join(
+                    timeout=5
+                )  # Wait for it to finish to avoid concurrent native calls
             transcript = self._sherpa_transcribe_audio(audio_chunks, RATE)
 
         if not transcript:
             if self.DEBUG:
-                queue_message(f"DEBUG: Transcription returned empty (chunks={len(audio_chunks)}, speech_frames={speech_frames})")
+                queue_message(
+                    f"DEBUG: Transcription returned empty (chunks={len(audio_chunks)}, speech_frames={speech_frames})"
+                )
             return None
 
         audio_duration = len(audio_chunks) * 4000 / RATE
-        queue_message(f"DEBUG: Transcribed: '{transcript}' (speech={speech_frames}, chunks={len(audio_chunks)}, ~{audio_duration:.1f}s audio)")
+        queue_message(
+            f"DEBUG: Transcribed: '{transcript}' (speech={speech_frames}, chunks={len(audio_chunks)}, ~{audio_duration:.1f}s audio)"
+        )
 
         # Check if preemptive LLM result is valid (transcript matches)
         extra = None
-        if preemptive_fired and preemptive_transcript[0] == transcript and preemptive_thread is not None:
+        if (
+            preemptive_fired
+            and preemptive_transcript[0] == transcript
+            and preemptive_thread is not None
+        ):
             preemptive_thread.join(timeout=10)
             if preemptive_result[0] is not None:
                 extra = {"preemptive_llm_result": preemptive_result[0]}
                 queue_message("INFO: Using preemptive LLM result (transcript matched)")
             else:
-                queue_message("INFO: Preemptive LLM returned None, falling back to normal")
+                queue_message(
+                    "INFO: Preemptive LLM returned None, falling back to normal"
+                )
         elif preemptive_fired:
             queue_message("INFO: Preemptive LLM discarded (transcript changed)")
 
@@ -1332,6 +1611,7 @@ class STTManager:
         processors = {
             "fastrtc": self._detect_wake_word_fastrtc,
             "sherpa-onnx": self._detect_wake_word_sherpa_onnx,
+            "picovoice": self._detect_wake_word_picovoice,
         }
         wake_proc = self.config["STT"].get("wake_word_processor", "atomik")
         return processors.get(wake_proc, self._detect_wake_word_atomik)()
@@ -1346,6 +1626,58 @@ class STTManager:
             if self.wake_word_callback:
                 self.wake_word_callback(wake_response)
 
+    def _detect_wake_word_picovoice(self) -> bool:
+        """
+        Detect the wake word using enhanced false-positive filtering.
+        """
+        # Notify external service to stop talking.
+        try:
+            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
+        except Exception:
+            pass
+
+        recorder = None
+
+        try:
+            recorder = PvRecorder(frame_length=512, device_index=-1)
+            recorder.start()
+            while True:
+                audio_chunk = recorder.read()  # Read 512 frames per buffer
+                audio_chunk = np.array(audio_chunk, dtype=np.int16)
+                if audio_chunk.ndim != 1:
+                    audio_chunk = audio_chunk.flatten()  # Make sure it's a 1D array
+
+                # Use Porcupine to process the audio chunk and detect the wake word
+                keyword_index = self.porcupine.process(audio_chunk)
+
+                if keyword_index >= 0:
+                    try:
+                        if self.config["STT"].get("use_indicators"):
+                            self.play_wav("../stt/beep_on.wav")
+                        requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
+                    except Exception:
+                        pass
+
+                    character_path = self.config.get("CHAR", {}).get(
+                        "character_card_path"
+                    )
+                    character_name = (
+                        os.path.splitext(os.path.basename(character_path))[0]
+                        if character_path
+                        else "TARS"
+                    )
+                    if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
+                        wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                        queue_message(f"{character_name}: {wake_response}", stream=True)
+                        if self.wake_word_callback:
+                            self.wake_word_callback(wake_response)
+                    return True
+
+        except Exception as e:
+            queue_message(f"ERROR: Wake word detection failed: {e}")
+            return False
+        return False
+
     def _detect_wake_word_fastrtc(self) -> bool:
         """Detect the wake word using FastRTC STT by transcribing short audio chunks."""
         if not self.fastrtc_model:
@@ -1359,8 +1691,8 @@ class STTManager:
 
         # Transcript verify gate
         transcript_verify_fn = None
-        stt_cfg = CONFIG.get('STT', {})
-        if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
+        stt_cfg = CONFIG.get("STT", {})
+        if stt_cfg.get("vad_transcript_verify", "False").strip() == "True":
             transcript_verify_fn = self._build_transcript_verify_fn()
 
         RATE = self.MODEL_RATE
@@ -1372,6 +1704,7 @@ class STTManager:
             # Flush stale mic audio after TTS playback
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
+
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
                     mic.flush()
@@ -1397,16 +1730,22 @@ class STTManager:
                 # Convert to float32 for FastRTC
                 audio_data = data.astype(np.float32).flatten() / 32768.0
                 try:
-                    transcript = self.fastrtc_model.stt((RATE, audio_data)).strip().lower()
+                    transcript = (
+                        self.fastrtc_model.stt((RATE, audio_data)).strip().lower()
+                    )
                 except Exception as e:
                     queue_message(f"ERROR: FastRTC STT failed: {e}")
                     continue
 
                 if self.DEBUG:
-                    queue_message(f"DEBUG: FastRTC Wake Word Transcript: '{transcript}'")
+                    queue_message(
+                        f"DEBUG: FastRTC Wake Word Transcript: '{transcript}'"
+                    )
 
                 if self.WAKE_WORD in transcript:
-                    if not self._run_wake_gates(audio_data, transcript_verify_fn=transcript_verify_fn):
+                    if not self._run_wake_gates(
+                        audio_data, transcript_verify_fn=transcript_verify_fn
+                    ):
                         continue
                     self._handle_wake_detected()
                     return True
@@ -1416,51 +1755,59 @@ class STTManager:
     def _detect_wake_word_atomik(self) -> bool:
         sensitivity = float(CONFIG["STT"]["sensitivity"])
         norm = (sensitivity - 1) / 9
-        atomik_mode = CONFIG['STT'].get('atomik_mode', 'auto').strip().lower()
-        mode = None if atomik_mode == 'auto' else atomik_mode
+        atomik_mode = CONFIG["STT"].get("atomik_mode", "auto").strip().lower()
+        mode = None if atomik_mode == "auto" else atomik_mode
 
-        if atomik_mode == 'template':
+        if atomik_mode == "template":
             # Template mode: cosine similarity scores range ~0.4-0.9
             # Higher sensitivity = lower threshold = easier to trigger
             # sens 1 → 0.70, sens 5 → 0.55, sens 10 → 0.40
-            curve = norm ** 1.3
+            curve = norm**1.3
             threshold = round(max(0.35, min(0.70 - curve * 0.35, 0.70)), 2)
         else:
             # Model mode: CNN/ONNX outputs 0-1 probability
             # sens 1 → 0.80, sens 5 → 0.68, sens 10 → 0.40
-            curve = norm ** 1.6
+            curve = norm**1.6
             threshold = round(max(0.40, min(0.80 - curve * 0.4, 0.80)), 2)
 
         # Transcript verify gate
         transcript_verify_fn = None
-        stt_cfg = CONFIG.get('STT', {})
-        if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
+        stt_cfg = CONFIG.get("STT", {})
+        if stt_cfg.get("vad_transcript_verify", "False").strip() == "True":
             transcript_verify_fn = self._build_transcript_verify_fn()
 
-        detector = WakeWordSystem(self.WAKE_WORD, self.MODEL_RATE, threshold, debug=self.DEBUG, mode=mode)
+        detector = WakeWordSystem(
+            self.WAKE_WORD, self.MODEL_RATE, threshold, debug=self.DEBUG, mode=mode
+        )
         detector.createModel()
         # Wait for TTS to finish before entering blocking wake word listener
         while is_tts_playing():
             time.sleep(0.05)
         while True:
             detector.listenForWakeWord()
-            audio_window = np.array(list(detector.buffer)[-int(self.MODEL_RATE * 2):], dtype=np.float32)
-            if self._run_wake_gates(audio_window, transcript_verify_fn=transcript_verify_fn):
+            audio_window = np.array(
+                list(detector.buffer)[-int(self.MODEL_RATE * 2) :], dtype=np.float32
+            )
+            if self._run_wake_gates(
+                audio_window, transcript_verify_fn=transcript_verify_fn
+            ):
                 self._handle_wake_detected()
                 return True
 
     def _detect_wake_word_sherpa_onnx(self) -> bool:
         """Detect wake word using sherpa-onnx with a pre-allocated circular buffer."""
         if not self.sherpa_recognizer:
-            queue_message("ERROR: sherpa-onnx recognizer not loaded for wake word detection.")
+            queue_message(
+                "ERROR: sherpa-onnx recognizer not loaded for wake word detection."
+            )
             return False
 
         self._fire_and_forget_get(f"http://127.0.0.1:{self._webui_port}/stop_talking")
 
         # Transcript verify gate
         transcript_verify_fn = None
-        stt_cfg = CONFIG.get('STT', {})
-        if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
+        stt_cfg = CONFIG.get("STT", {})
+        if stt_cfg.get("vad_transcript_verify", "False").strip() == "True":
             transcript_verify_fn = self._build_transcript_verify_fn()
 
         RATE = self.MODEL_RATE
@@ -1473,73 +1820,88 @@ class STTManager:
         audio_buffer = np.zeros(frames_per_chunk, dtype=np.int16)
 
         try:
-          with ResamplingInputStream(dtype="int16") as mic:
-            # Flush stale mic audio after TTS playback to avoid detecting
-            # the robot's own voice as a wake word.
-            try:
-                from modules.module_tts import needs_mic_flush, clear_mic_flush
-                if needs_mic_flush():
-                    queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    mic.flush()
-                    clear_mic_flush()
-            except Exception:
-                pass
-
-            # Prime buffer with first full chunk
-            buf, _ = mic.read_exact(frames_per_chunk)
-            audio_buffer[:] = buf.flatten()
-
-            while self.running and not self.shutdown_event.is_set():
-                # Abort wake word detection if TTS started
-                if is_tts_playing():
-                    break
-
-                # Simple RMS silence gate — skip transcription when quiet to save CPU
-                if self._is_quiet(audio_buffer):
-                    audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
-                    buf, _ = mic.read_exact(read_frames)
-                    audio_buffer[overlap_frames:] = buf.flatten()
-                    continue
-
-                # Amplify and convert for transcription (skip denoising — not needed for wake word matching)
-                transcode_data = (audio_buffer.astype(np.float32) * self.amp_gain) / 32768.0
+            with ResamplingInputStream(dtype="int16") as mic:
+                # Flush stale mic audio after TTS playback to avoid detecting
+                # the robot's own voice as a wake word.
                 try:
-                    s = self.sherpa_recognizer.create_stream()
-                    s.accept_waveform(RATE, transcode_data)
-                    self.sherpa_recognizer.decode_stream(s)
-                    transcript = _SENSEVOICE_TAG_RE.sub('', s.result.text.strip().lower()).strip()
-                except Exception as e:
-                    queue_message(f"ERROR: sherpa-onnx STT failed: {e}")
-                    # Roll buffer forward and continue
-                    audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
-                    buf, _ = mic.read_exact(read_frames)
-                    audio_buffer[overlap_frames:] = buf.flatten()
-                    continue
-                finally:
-                    del s  # Free native stream to prevent heap corruption
+                    from modules.module_tts import needs_mic_flush, clear_mic_flush
 
-                if self.DEBUG and transcript:
-                    queue_message(f"DEBUG: Sherpa Wake Word Transcript: '{transcript}'")
+                    if needs_mic_flush():
+                        queue_message("DEBUG: Flushing mic audio after TTS playback")
+                        mic.flush()
+                        clear_mic_flush()
+                except Exception:
+                    pass
 
-                if self.WAKE_WORD in transcript or self._fuzzy_wake_word_match(transcript, self.WAKE_WORD):
-                    if not self._run_wake_gates(transcode_data, transcript_verify_fn=transcript_verify_fn):
-                        # Gate failed — roll buffer forward and keep listening
+                # Prime buffer with first full chunk
+                buf, _ = mic.read_exact(frames_per_chunk)
+                audio_buffer[:] = buf.flatten()
+
+                while self.running and not self.shutdown_event.is_set():
+                    # Abort wake word detection if TTS started
+                    if is_tts_playing():
+                        break
+
+                    # Simple RMS silence gate — skip transcription when quiet to save CPU
+                    if self._is_quiet(audio_buffer):
                         audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
                         buf, _ = mic.read_exact(read_frames)
                         audio_buffer[overlap_frames:] = buf.flatten()
                         continue
-                    # Break out of the loop first — the wake response callback
-                    # plays TTS audio (sd.play + sd.wait) which deadlocks if
-                    # the ResamplingInputStream is still open.
-                    wake_detected = True
-                    break
 
-                # Roll buffer: shift overlap to front, read new frames into remainder
-                audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
-                buf, _ = mic.read_exact(read_frames)
-                audio_buffer[overlap_frames:] = buf.flatten()
+                    # Amplify and convert for transcription (skip denoising — not needed for wake word matching)
+                    transcode_data = (
+                        audio_buffer.astype(np.float32) * self.amp_gain
+                    ) / 32768.0
+                    try:
+                        s = self.sherpa_recognizer.create_stream()
+                        s.accept_waveform(RATE, transcode_data)
+                        self.sherpa_recognizer.decode_stream(s)
+                        transcript = _SENSEVOICE_TAG_RE.sub(
+                            "", s.result.text.strip().lower()
+                        ).strip()
+                    except Exception as e:
+                        queue_message(f"ERROR: sherpa-onnx STT failed: {e}")
+                        # Roll buffer forward and continue
+                        audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
+                        buf, _ = mic.read_exact(read_frames)
+                        audio_buffer[overlap_frames:] = buf.flatten()
+                        continue
+                    finally:
+                        del s  # Free native stream to prevent heap corruption
+
+                    if self.DEBUG and transcript:
+                        queue_message(
+                            f"DEBUG: Sherpa Wake Word Transcript: '{transcript}'"
+                        )
+
+                    if self.WAKE_WORD in transcript or self._fuzzy_wake_word_match(
+                        transcript, self.WAKE_WORD
+                    ):
+                        if not self._run_wake_gates(
+                            transcode_data, transcript_verify_fn=transcript_verify_fn
+                        ):
+                            # Gate failed — roll buffer forward and keep listening
+                            audio_buffer[:overlap_frames] = audio_buffer[
+                                -overlap_frames:
+                            ]
+                            buf, _ = mic.read_exact(read_frames)
+                            audio_buffer[overlap_frames:] = buf.flatten()
+                            continue
+                        # Break out of the loop first — the wake response callback
+                        # plays TTS audio (sd.play + sd.wait) which deadlocks if
+                        # the ResamplingInputStream is still open.
+                        wake_detected = True
+                        break
+
+                    # Roll buffer: shift overlap to front, read new frames into remainder
+                    audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
+                    buf, _ = mic.read_exact(read_frames)
+                    audio_buffer[overlap_frames:] = buf.flatten()
         except sd.PortAudioError as e:
-            queue_message(f"WARNING: Audio device error in wake word detection, retrying in 2s: {e}")
+            queue_message(
+                f"WARNING: Audio device error in wake word detection, retrying in 2s: {e}"
+            )
             time.sleep(2)
             return False
 
@@ -1550,27 +1912,37 @@ class STTManager:
         return False
 
     @staticmethod
-    def _fuzzy_wake_word_match(transcript: str, wake_word: str, threshold: float = 0.6) -> bool:
+    def _fuzzy_wake_word_match(
+        transcript: str, wake_word: str, threshold: float = 0.6
+    ) -> bool:
         wake_words = wake_word.split()
         transcript_words = transcript.split()
         if len(transcript_words) < len(wake_words):
             return False
         for i in range(len(transcript_words) - len(wake_words) + 1):
-            window = transcript_words[i:i + len(wake_words)]
-            if all(SequenceMatcher(None, tw, ww).ratio() >= threshold for tw, ww in zip(window, wake_words)):
+            window = transcript_words[i : i + len(wake_words)]
+            if all(
+                SequenceMatcher(None, tw, ww).ratio() >= threshold
+                for tw, ww in zip(window, wake_words)
+            ):
                 return True
         return False
 
     @staticmethod
     def _fire_and_forget_get(url):
-        threading.Thread(target=lambda: requests.get(url, timeout=1), daemon=True).start()
+        threading.Thread(
+            target=lambda: requests.get(url, timeout=1), daemon=True
+        ).start()
 
     # === Progress Bar ===
 
     def _get_progress_bar(self):
         if self._progress_bar_funcs is None:
             bar_length = 10
-            show_console = self.ui_manager.__class__.__name__ not in ('UIManagerLite', 'UIManagerStub')
+            show_console = self.ui_manager.__class__.__name__ not in (
+                "UIManagerLite",
+                "UIManagerStub",
+            )
 
             def update(frames, max_frames):
                 self.ui_manager.silence(frames)
@@ -1589,25 +1961,39 @@ class STTManager:
             "sherpa-onnx": self._is_silence_detected_sherpa_onnx,
             "smart-turn": self._is_silence_detected_smart_turn,
         }
-        return vad_dispatch.get(self.vadmethod, self._is_silence_detected_rms)(data, detected_speech, silent_frames)
+        return vad_dispatch.get(self.vadmethod, self._is_silence_detected_rms)(
+            data, detected_speech, silent_frames
+        )
 
     def _is_silence_detected_silero(self, data, detected_speech, silent_frames):
         """Check if the provided audio data represents silence using Silero VAD.
         Always returns a tuple of (is_silence, detected_speech, silent_frames)."""
         update_bar, clear_bar = self._get_progress_bar()
         try:
-            if torch is None or self.silero_vad_model is None or self.get_speech_timestamps is None:
-                return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+            if (
+                torch is None
+                or self.silero_vad_model is None
+                or self.get_speech_timestamps is None
+            ):
+                return self._is_silence_detected_rms(
+                    data, detected_speech, silent_frames
+                )
 
             audio_tensor = torch.from_numpy(data.astype(np.float32) / 32768.0).squeeze()
-            if hasattr(self.silero_vad_model, 'reset_states'):
+            if hasattr(self.silero_vad_model, "reset_states"):
                 self.silero_vad_model.reset_states()
 
-            speech_ts = self.get_speech_timestamps(
-                audio_tensor, self.silero_vad_model,
-                sampling_rate=self.MODEL_RATE, threshold=0.3,
-                min_speech_duration_ms=100, return_seconds=True
-            ) or []
+            speech_ts = (
+                self.get_speech_timestamps(
+                    audio_tensor,
+                    self.silero_vad_model,
+                    sampling_rate=self.MODEL_RATE,
+                    threshold=0.3,
+                    min_speech_duration_ms=100,
+                    return_seconds=True,
+                )
+                or []
+            )
 
             if speech_ts:
                 detected_speech = True
@@ -1640,12 +2026,16 @@ class STTManager:
             detected_speech = True
             silent_frames = 0
             if self.DEBUG:
-                queue_message(f"AUDIO: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}")
+                queue_message(
+                    f"AUDIO: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}"
+                )
             clear_bar()
         else:
             silent_frames += 1
             if self.DEBUG:
-                queue_message(f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}")
+                queue_message(
+                    f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}"
+                )
             update_bar(silent_frames, self.MAX_SILENT_FRAMES)
             if silent_frames > self.MAX_SILENT_FRAMES:
                 clear_bar()
@@ -1658,7 +2048,9 @@ class STTManager:
         update_bar, clear_bar = self._get_progress_bar()
         try:
             if self.sherpa_vad is None:
-                return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+                return self._is_silence_detected_rms(
+                    data, detected_speech, silent_frames
+                )
 
             self.sherpa_vad.accept_waveform(data.astype(np.float32).flatten() / 32768.0)
 
@@ -1689,16 +2081,22 @@ class STTManager:
         if len(audio) > max_samples:
             audio = audio[-max_samples:]
         inputs = self.smart_turn_extractor(
-            audio, sampling_rate=16000, return_tensors="np",
-            padding="max_length", max_length=max_samples,
-            truncation=True, do_normalize=True
+            audio,
+            sampling_rate=16000,
+            return_tensors="np",
+            padding="max_length",
+            max_length=max_samples,
+            truncation=True,
+            do_normalize=True,
         )
-        outputs = self.smart_turn_session.run(None, {
-            "input_features": inputs.input_features.astype(np.float32)
-        })
+        outputs = self.smart_turn_session.run(
+            None, {"input_features": inputs.input_features.astype(np.float32)}
+        )
         prob = outputs[0][0].item()
         if self.DEBUG:
-            queue_message(f"DEBUG: Smart Turn infer done: prob={prob:.3f}, audio_len={len(audio)}")
+            queue_message(
+                f"DEBUG: Smart Turn infer done: prob={prob:.3f}, audio_len={len(audio)}"
+            )
         return prob
 
     def _is_silence_detected_smart_turn(self, data, detected_speech, silent_frames):
@@ -1712,7 +2110,9 @@ class STTManager:
         update_bar, clear_bar = self._get_progress_bar()
         try:
             if self.smart_turn_session is None or self.smart_turn_extractor is None:
-                return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+                return self._is_silence_detected_rms(
+                    data, detected_speech, silent_frames
+                )
 
             # RMS check on current frame
             rms = self._compute_rms_fast(data)
@@ -1725,9 +2125,15 @@ class STTManager:
                 # Speech detected — accumulate audio and cancel any pending inference
                 detected_speech = True
                 silent_frames = 0
-                self.smart_turn_audio_buffer.append(data.astype(np.float32).flatten() / 32768.0)
-                self._smart_turn_future = None  # discard stale result if speaker resumed
-                self._smart_turn_last_buf_len = 0  # reset cache so next silence triggers inference
+                self.smart_turn_audio_buffer.append(
+                    data.astype(np.float32).flatten() / 32768.0
+                )
+                self._smart_turn_future = (
+                    None  # discard stale result if speaker resumed
+                )
+                self._smart_turn_last_buf_len = (
+                    0  # reset cache so next silence triggers inference
+                )
                 clear_bar()
                 return False, detected_speech, silent_frames
 
@@ -1748,10 +2154,14 @@ class STTManager:
                     probability = self._smart_turn_future.result()
                     self._smart_turn_future = None
                     if self.DEBUG:
-                        queue_message(f"DEBUG: Smart Turn probability: {probability:.3f}    ")
+                        queue_message(
+                            f"DEBUG: Smart Turn probability: {probability:.3f}    "
+                        )
                     if probability > 0.5:
                         if self.DEBUG:
-                            queue_message(f"DEBUG: Smart Turn -> end of turn (prob={probability:.3f}, detected_speech={detected_speech}, silent={silent_frames}, buf={len(self.smart_turn_audio_buffer)})")
+                            queue_message(
+                                f"DEBUG: Smart Turn -> end of turn (prob={probability:.3f}, detected_speech={detected_speech}, silent={silent_frames}, buf={len(self.smart_turn_audio_buffer)})"
+                            )
                         clear_bar()
                         self.smart_turn_audio_buffer.clear()
                         return True, detected_speech, silent_frames
@@ -1761,14 +2171,19 @@ class STTManager:
 
             # Kick off inference if not already running and buffer has new audio
             _cur_buf_len = len(self.smart_turn_audio_buffer)
-            if (silent_frames >= 3 and detected_speech
-                    and self.smart_turn_audio_buffer
-                    and self._smart_turn_future is None
-                    and _cur_buf_len != self._smart_turn_last_buf_len):
+            if (
+                silent_frames >= 3
+                and detected_speech
+                and self.smart_turn_audio_buffer
+                and self._smart_turn_future is None
+                and _cur_buf_len != self._smart_turn_last_buf_len
+            ):
                 audio_snapshot = np.concatenate(list(self.smart_turn_audio_buffer))
                 self._smart_turn_last_buf_len = _cur_buf_len
                 if self.DEBUG:
-                    queue_message(f"DEBUG: Smart Turn submitting inference (silent={silent_frames}, buf_chunks={_cur_buf_len}, samples={len(audio_snapshot)})")
+                    queue_message(
+                        f"DEBUG: Smart Turn submitting inference (silent={silent_frames}, buf_chunks={_cur_buf_len}, samples={len(audio_snapshot)})"
+                    )
                 self._smart_turn_future = self._smart_turn_executor.submit(
                     self._smart_turn_infer, audio_snapshot
                 )
@@ -1802,13 +2217,23 @@ class STTManager:
             q1, q3 = np.percentile(bg_rms, [25, 75])
             iqr = q3 - q1
             filtered = bg_rms[(bg_rms >= q1 - 1.5 * iqr) & (bg_rms <= q3 + 1.5 * iqr)]
-            self.wake_silence_threshold = np.max(filtered) if filtered.size > 0 else np.median(bg_rms)
+            self.wake_silence_threshold = (
+                np.max(filtered) if filtered.size > 0 else np.median(bg_rms)
+            )
             self.silence_threshold = self.wake_silence_threshold * self.silence_margin
             self.silence_threshold_margin = self.silence_threshold
-            db = 20 * np.log10(self.silence_threshold) if self.silence_threshold > 0 else -999
-            queue_message(f"INFO: Silence threshold: {db:.2f} dB (rms={self.silence_threshold:.1f}, bg_noise={self.wake_silence_threshold:.1f}, margin={self.silence_margin}x, amp_gain={self.amp_gain}x)")
+            db = (
+                20 * np.log10(self.silence_threshold)
+                if self.silence_threshold > 0
+                else -999
+            )
+            queue_message(
+                f"INFO: Silence threshold: {db:.2f} dB (rms={self.silence_threshold:.1f}, bg_noise={self.wake_silence_threshold:.1f}, margin={self.silence_margin}x, amp_gain={self.amp_gain}x)"
+            )
         else:
-            queue_message("WARNING: Background noise measurement failed; using default threshold.")
+            queue_message(
+                "WARNING: Background noise measurement failed; using default threshold."
+            )
 
     # Backward compatibility alias
     def prepare_audio_data(self, data):
@@ -1847,25 +2272,40 @@ class STTManager:
 
         mode = self._bargein_mode
 
-        if mode == 'voiceprint':
+        if mode == "voiceprint":
             # Voiceprint mode needs speaker ID
             try:
                 from modules.module_speaker_id import get_speaker_id_manager
-                sid = get_speaker_id_manager()
-                if sid is None or sid._manager is None or sid._manager.num_speakers == 0:
-                    queue_message("WARN: Barge-in voiceprint mode requires Speaker ID with enrolled speakers, falling back to fuzzy")
-                    mode = 'fuzzy'
-            except Exception as e:
-                queue_message(f"WARN: Speaker ID not available ({e}), falling back to fuzzy barge-in")
-                mode = 'fuzzy'
 
-        if mode == 'fuzzy' and self.sherpa_recognizer is None and self.fastrtc_model is None:
-            queue_message("WARN: Barge-in fuzzy mode requires sherpa-onnx or fastrtc, skipping")
+                sid = get_speaker_id_manager()
+                if (
+                    sid is None
+                    or sid._manager is None
+                    or sid._manager.num_speakers == 0
+                ):
+                    queue_message(
+                        "WARN: Barge-in voiceprint mode requires Speaker ID with enrolled speakers, falling back to fuzzy"
+                    )
+                    mode = "fuzzy"
+            except Exception as e:
+                queue_message(
+                    f"WARN: Speaker ID not available ({e}), falling back to fuzzy barge-in"
+                )
+                mode = "fuzzy"
+
+        if (
+            mode == "fuzzy"
+            and self.sherpa_recognizer is None
+            and self.fastrtc_model is None
+        ):
+            queue_message(
+                "WARN: Barge-in fuzzy mode requires sherpa-onnx or fastrtc, skipping"
+            )
             return
 
         self._bargein_active = True
 
-        if mode == 'voiceprint':
+        if mode == "voiceprint":
             self._start_bargein_voiceprint()
         else:
             self._start_bargein_fuzzy(tts_text)
@@ -1877,13 +2317,13 @@ class STTManager:
         # Build initial word list from whatever text we have; during streaming
         # this may be empty and will be updated via update_bargein_tts_text().
         if tts_text:
-            cleaned = _NON_ALNUM_SPACE_RE.sub('', tts_text.lower())
+            cleaned = _NON_ALNUM_SPACE_RE.sub("", tts_text.lower())
             self._bargein_tts_data = {
-                'word_list': cleaned.split(),
-                'words_all': set(cleaned.split()),
+                "word_list": cleaned.split(),
+                "words_all": set(cleaned.split()),
             }
         else:
-            self._bargein_tts_data = {'word_list': [], 'words_all': set()}
+            self._bargein_tts_data = {"word_list": [], "words_all": set()}
 
         tts_data = self._bargein_tts_data  # local ref for monitor thread
 
@@ -1894,11 +2334,11 @@ class STTManager:
             frame_count = 0
             start_time = time.time()
             WORDS_PER_SEC = 3.0  # Estimated TTS speaking rate
-            WINDOW_PAD = 4       # Extra words before/after estimated position
+            WINDOW_PAD = 4  # Extra words before/after estimated position
             accumulated_novel = []  # Novel words across consecutive frames
-            no_novel_streak = 0     # Reset accumulator after 2 empty frames
-            ECHO_GRACE_FRAMES = 2   # Skip ~250ms after TTS stops to let echo die
-            grace_remaining = 0     # Countdown frames after TTS stops playing
+            no_novel_streak = 0  # Reset accumulator after 2 empty frames
+            ECHO_GRACE_FRAMES = 2  # Skip ~250ms after TTS stops to let echo die
+            grace_remaining = 0  # Countdown frames after TTS stops playing
 
             try:
                 with ResamplingInputStream(dtype="int16") as mic:
@@ -1928,15 +2368,17 @@ class STTManager:
                         if frame_count % TRANSCRIBE_EVERY == 0:
                             if len(audio_buf) < 2:
                                 if self.DEBUG:
-                                    queue_message(f"DEBUG: Barge-in: no speech frames ({len(audio_buf)}/8 above threshold)")
+                                    queue_message(
+                                        f"DEBUG: Barge-in: no speech frames ({len(audio_buf)}/8 above threshold)"
+                                    )
                         if frame_count % TRANSCRIBE_EVERY == 0 and len(audio_buf) >= 2:
                             transcript = self._bargein_transcribe(audio_buf)
                             buf_len = len(audio_buf)
                             audio_buf.clear()
                             if transcript:
                                 # Read current TTS words (may be updated by streaming thread)
-                                tts_word_list = tts_data['word_list']
-                                tts_words_all = tts_data['words_all']
+                                tts_word_list = tts_data["word_list"]
+                                tts_words_all = tts_data["words_all"]
 
                                 # Build sliding window of TTS words near current playback position
                                 elapsed = time.time() - start_time
@@ -1945,7 +2387,9 @@ class STTManager:
                                 win_end = min(len(tts_word_list), pos + WINDOW_PAD + 1)
                                 window_words = set(tts_word_list[win_start:win_end])
 
-                                novel = self._find_novel_words(transcript, tts_words_all, window_words)
+                                novel = self._find_novel_words(
+                                    transcript, tts_words_all, window_words
+                                )
                                 if novel:
                                     accumulated_novel.extend(novel)
                                     no_novel_streak = 0
@@ -1955,10 +2399,14 @@ class STTManager:
                                         accumulated_novel.clear()
 
                                 if self.DEBUG:
-                                    queue_message(f"DEBUG: Barge-in: '{transcript}' window={window_words} novel={novel} accumulated={accumulated_novel} (frames={buf_len})")
+                                    queue_message(
+                                        f"DEBUG: Barge-in: '{transcript}' window={window_words} novel={novel} accumulated={accumulated_novel} (frames={buf_len})"
+                                    )
                                 if len(accumulated_novel) >= self._bargein_min_novel:
                                     if self.DEBUG:
-                                        queue_message(f"DEBUG: Barge-in detected! Heard: '{transcript}' (novel: {accumulated_novel})")
+                                        queue_message(
+                                            f"DEBUG: Barge-in detected! Heard: '{transcript}' (novel: {accumulated_novel})"
+                                        )
                                     stop_tts_playback()
                                     break
             except Exception as e:
@@ -1974,13 +2422,13 @@ class STTManager:
 
         def _monitor():
             bargein_threshold = self.silence_threshold * self._bargein_rms_scale
-            speech_buf = []       # Rolling buffer of speech frames (kept across checks)
-            MAX_BUF = 16          # Keep last ~2s of speech frames (16 x 125ms)
-            CHECK_EVERY = 4       # Check every ~0.5s (4 x 125ms)
-            MIN_SPEECH = 8        # Need >=8 speech frames (~1s) for usable embedding
+            speech_buf = []  # Rolling buffer of speech frames (kept across checks)
+            MAX_BUF = 16  # Keep last ~2s of speech frames (16 x 125ms)
+            CHECK_EVERY = 4  # Check every ~0.5s (4 x 125ms)
+            MIN_SPEECH = 8  # Need >=8 speech frames (~1s) for usable embedding
             frame_count = 0
-            ECHO_GRACE_FRAMES = 2   # Skip ~250ms after TTS stops to let echo die
-            grace_remaining = 0     # Countdown frames after TTS stops playing
+            ECHO_GRACE_FRAMES = 2  # Skip ~250ms after TTS stops to let echo die
+            grace_remaining = 0  # Countdown frames after TTS stops playing
 
             try:
                 with ResamplingInputStream(dtype="int16") as mic:
@@ -2012,7 +2460,9 @@ class STTManager:
 
                             # Use last MIN_SPEECH..MAX_BUF speech frames for embedding
                             audio_int16 = np.concatenate(speech_buf[-MAX_BUF:])
-                            audio_float32 = audio_int16.astype(np.float32).flatten() / 32768.0
+                            audio_float32 = (
+                                audio_int16.astype(np.float32).flatten() / 32768.0
+                            )
 
                             sid = get_speaker_id_manager()
                             if sid is None:
@@ -2023,7 +2473,9 @@ class STTManager:
                                 continue
 
                             # Identify speaker (skip normal margin check — we do our own below)
-                            name, confidence = sid.identify_speaker(embedding, skip_margin=True)
+                            name, confidence = sid.identify_speaker(
+                                embedding, skip_margin=True
+                            )
 
                             # Ignore Unknown_* profiles — they may be TARS bleed
                             # that got auto-enrolled. Only named speakers matter.
@@ -2047,15 +2499,23 @@ class STTManager:
                                     margin = confidence - runner_up
 
                             if self.DEBUG and name and confidence > 0.01:
-                                queue_message(f"DEBUG: Barge-in voiceprint: speaker='{name}' confidence={confidence:.2f} threshold={self._bargein_voiceprint_threshold:.2f} margin={margin:.3f}")
+                                queue_message(
+                                    f"DEBUG: Barge-in voiceprint: speaker='{name}' confidence={confidence:.2f} threshold={self._bargein_voiceprint_threshold:.2f} margin={margin:.3f}"
+                                )
 
                             # Match requires: above threshold AND margin > 0.05
                             # (bleed typically has margin < 0.04, real speech > 0.10)
-                            matched = bool(name and confidence >= self._bargein_voiceprint_threshold and margin > 0.05)
+                            matched = bool(
+                                name
+                                and confidence >= self._bargein_voiceprint_threshold
+                                and margin > 0.05
+                            )
 
                             if matched:
                                 if self.DEBUG:
-                                    queue_message(f"DEBUG: Barge-in detected! Voice matched '{name}' (confidence: {confidence:.2f}, margin: {margin:.3f})")
+                                    queue_message(
+                                        f"DEBUG: Barge-in detected! Voice matched '{name}' (confidence: {confidence:.2f}, margin: {margin:.3f})"
+                                    )
                                 stop_tts_playback()
                                 break
             except Exception as e:
@@ -2072,7 +2532,7 @@ class STTManager:
                 s = self.sherpa_recognizer.create_stream()
                 s.accept_waveform(16000, audio_data)
                 self.sherpa_recognizer.decode_stream(s)
-                transcript = _SENSEVOICE_TAG_RE.sub('', s.result.text.strip()).strip()
+                transcript = _SENSEVOICE_TAG_RE.sub("", s.result.text.strip()).strip()
                 del s
                 return transcript or None
             elif self.fastrtc_model is not None:
@@ -2095,7 +2555,7 @@ class STTManager:
         common mis-transcriptions (e.g. "under" from "on your", "worries" from "warriors").
 
         Returns list of novel words, or empty list if all words match TTS."""
-        cleaned = _NON_ALNUM_SPACE_RE.sub('', transcript.lower())
+        cleaned = _NON_ALNUM_SPACE_RE.sub("", transcript.lower())
         heard_words = cleaned.split()
         if not heard_words:
             return []
@@ -2143,10 +2603,10 @@ class STTManager:
         monitor can distinguish speaker bleed from real user speech."""
         if not self._bargein_active:
             return
-        cleaned = _NON_ALNUM_SPACE_RE.sub('', tts_text.lower())
+        cleaned = _NON_ALNUM_SPACE_RE.sub("", tts_text.lower())
         word_list = cleaned.split()
-        self._bargein_tts_data['word_list'] = word_list
-        self._bargein_tts_data['words_all'] = set(word_list)
+        self._bargein_tts_data["word_list"] = word_list
+        self._bargein_tts_data["words_all"] = set(word_list)
 
     def stop_bargein_monitor(self):
         """Stop the barge-in monitor thread and wait for mic stream to close."""
