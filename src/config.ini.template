@@ -60,11 +60,11 @@ language = english
 # Activation phrase — 2–3 syllables works best
 wake_word = hey tars
 # Wake word engine (independent of stt_processor — mix freely)
-#   Pi5: sherpa-onnx | atomik | fastrtc
+#   Pi5: sherpa-onnx | atomik | fastrtc | picovoice
 #   Pi4: sherpa-onnx | atomik
 #   Pi3: sherpa-onnx | atomik
 #   PiZero2: atomik
-wake_word_processor = atomik
+wake_word_processor = picovoice
 # Atomik detection mode (atomik only) auto = use ONNX model if available, otherwise fall back to template, model = ONNX model only (trained with tools/wakeword-trainer), template = cosine similarity only (record wake word 5 times on device)
 atomik_mode = template
 # Wake word gates — apply to all wake word engines
@@ -111,6 +111,8 @@ speaker_id_threshold = 0.75
 mic_amp_gain = 13.0
 # Silence margin — how many times above background noise counts as speech (lower = more sensitive, default 3.0)
 silence_margin = 3.0
+# Relative path to the Porcupine keyword file
+picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 
 [TTS]
 # Use voice settings from character card instead of settings above
