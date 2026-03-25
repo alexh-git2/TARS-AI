@@ -151,7 +151,6 @@ cython_debug/
 # LLM and Vision Files
 llm/
 vision/
-config.ini
 config_backup.ini
 config-server.ini
 src/models/
