@@ -93,6 +93,24 @@ if CAPABILITIES is None or (
     except ImportError:
         pass
 
+# Picovoice (Pi5, Pi4, Pi3)
+if CAPABILITIES is None or (
+    CAPABILITIES.allowed_wake and "picovoice" in CAPABILITIES.allowed_wake
+):
+    try:
+        import pvporcupine as _pvporcupine
+
+        pvporcupine = _pvporcupine
+    except ImportError:
+        pass
+
+    try:
+        from pvrecorder import PvRecorder as _PvRecorder
+
+        PvRecorder = _PvRecorder
+    except ImportError:
+        pass
+
 # Sherpa-ONNX (Pi5, Pi4)
 if CAPABILITIES is None or (
     CAPABILITIES.allowed_stt and "sherpa-onnx" in CAPABILITIES.allowed_stt
