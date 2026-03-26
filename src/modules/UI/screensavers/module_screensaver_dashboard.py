@@ -41,6 +41,7 @@ except ImportError:
 import re
 
 from modules.module_config import load_config
+from modules.module_geolocation import GEOLOCATION
 
 CONFIG = load_config()
 
@@ -52,12 +53,12 @@ def load_ini_config():
     config = configparser.ConfigParser()
     
     defaults = {
-        'latitude': 45.5017,
-        'longitude': -73.5673,
-        'timezone': 'America/Montreal',
-        'location_name': 'Montreal',
+        'latitude': GEOLOCATION["lat"],
+        'longitude': GEOLOCATION["lon"],
+        'timezone': GEOLOCATION["timezone"],
+        'location_name': GEOLOCATION["location_name"],
         'language': 'en',
-        'country': 'CA',
+        'country': GEOLOCATION["country"],
         'temp_unit': 'celsius',
         'weather_update_interval': 600,
         'news_update_interval': 300,

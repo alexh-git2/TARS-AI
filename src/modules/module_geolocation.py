@@ -76,6 +76,18 @@ def update_geo_location():
             "lon:",
             location_info.get("lon"),
         )
+
+        parts = [
+            p
+            for p in [
+                location_info["city"],
+                location_info["region"],
+                location_info["country"],
+            ]
+            if p
+        ]
+        location_name = ", ".join(parts) if parts else location_info["region"]
+        location_info["location_name"] = location_name
         GEOLOCATION.update(location_info)
     else:
         print("[GEO_SERVICES] Failed to find location.")

@@ -90,17 +90,11 @@ def _resolve_location_name(lat, lon):
 
     now = _time.monotonic()
     if GEOLOCATION["lat"] and GEOLOCATION["lon"]:
-        parts = [
-            p
-            for p in [GEOLOCATION["city"], GEOLOCATION["state"], GEOLOCATION["country"]]
-            if p
-        ]
-        name = ", ".join(parts) if parts else GEOLOCATION["city"]
         _location_cache.update(
             {
                 "lat": GEOLOCATION["lat"],
                 "lon": GEOLOCATION["lon"],
-                "name": name,
+                "name": GEOLOCATION["location_name"],
                 "cached_at": _time.monotonic(),
             }
         )
