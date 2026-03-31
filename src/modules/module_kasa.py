@@ -3,20 +3,22 @@ module_kasa.py
 
 Kasa smart switch control for TARS-AI.
 """
+
 import asyncio
+import os
 from kasa import Discover, Device
-from kasa.device import Device
 from typing import Dict
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
- 
+import os
+
 CONFIG = load_config()
- 
-_coffee_bar_lights: Device
-_espresso_machine: Device
 
 _retry_count = 3
 _delay = 0.5
+
+_devices: Dict[str, Device] = {}
+
 
 async def _turn_on(plug: Device):
     for attempt in range(1, _retry_count + 1):
@@ -30,7 +32,8 @@ async def _turn_on(plug: Device):
             if attempt == _retry_count:
                 raise
             await asyncio.sleep(_delay)
-    
+
+
 async def _turn_off(plug: Device):
     for attempt in range(1, _retry_count + 1):
         try:
@@ -43,37 +46,45 @@ async def _turn_off(plug: Device):
             if attempt == _retry_count:
                 raise
             await asyncio.sleep(_delay)
-    
-def turn_on_coffeebar():
-    asyncio.run(_turn_on(_coffee_bar_lights))
 
-def turn_off_coffeebar():
-    asyncio.run(_turn_off(_coffee_bar_lights)) 
 
-def turn_on_espresso_machine():
-    asyncio.run(_turn_on(_espresso_machine))
+def turn_on(name):
+    global _devices
+    kasa_device = _devices.get(name)
+    if kasa_device is not None:
+        asyncio.run(_turn_on(kasa_device))
+    else:
+        queue_message(f"Kasa device '{name}' not found.")
 
-def turn_off_espresso_machine():
-    asyncio.run(_turn_off(_espresso_machine))
-                      
-async def main():    
-    queue_message("[KASA] initializing...")
-    devices = await Discover.discover()
-    global _coffee_bar_lights
-    global _espresso_machine
-    
+
+def turn_off(name):
+    global _devices
+    kasa_device = _devices.get(name)
+    if kasa_device is not None:
+        asyncio.run(_turn_off(kasa_device))
+    else:
+        queue_message(f"Kasa device '{name}' not found.")
+
+
+async def main():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(base_dir)
+    username = os.getenv("KASA_USERNAME")
+    password = os.getenv("KASA_PASSWORD")
+    devices = await Discover.discover(username=username, password=password)
+    global _devices
+    global _delay
+
     for ip, dev in devices.items():
-        await dev.update()  # get full info if you want alias, state, etc.
-        #print(f"{ip} -> ({dev.model}), On: {dev.is_on} Alias: {dev.alias}")
+        try:
+            await dev.update()  # get full info if you want alias, state, etc.
+            print(f"{ip} -> ({dev.model}), On: {dev.is_on} Alias: {dev.alias}")
+            _devices[f"{dev.alias}"] = dev
+            await asyncio.sleep(_delay)
+        except Exception as e:
+            queue_message(f"module_kasa: {e}")
 
-        if dev.alias.lower().strip() == CONFIG["KASA"]["coffee_bar_lights"].lower().strip():
-            _coffee_bar_lights = dev
 
-        if dev.alias.lower().strip() == CONFIG["KASA"]["espresso_machine"].lower().strip():
-            _espresso_machine = dev
-            
-        await asyncio.sleep(_delay)
-            
-        
 def start_kasa():
+    print("[KASA] Initializing Kasa module...")
     asyncio.run(main())
