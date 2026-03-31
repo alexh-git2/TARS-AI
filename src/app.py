@@ -67,6 +67,7 @@ from modules.module_main import (
 )
 from modules.module_llm import process_completion
 from modules.module_geolocation import update_geo_location
+from modules.module_kasa import start_kasa
 
 # === Conditional Memory Manager Import ===
 if USE_LITE_MEMORY:
@@ -416,6 +417,9 @@ if __name__ == "__main__":
 
     # === Servo Initialization ===
     startup_initialization()
+
+    # === Initialize Kasa ===
+    start_kasa()
 
     # === Main Loop ===
     try:
