@@ -16,21 +16,22 @@ SKILL = {
         },
     },
     "prompt": """kasa
+    MANDATORY: Always call function when user asks turn on or turn off coffee machine, espresso machine, or coffee bar lights
     Triggers: Use when the user wants to control Kasa smart plugs or ask about their status.
       * User wants to turn on or off their coffee or espresso machine
       * User wants to turn on or off their coffee bar lights
     Example: {{"function": "kasa", "parameters": {{"device": "coffee_machine", "action": "off"}}}}""",
     "examples": [
-        """Example - Turn on coffee or espresso machine:
+        """Example - Turn on coffee machine:
 User: "Turn on coffee machine"
 Response: {{"reply": "Turning on coffee machine", "function_calls": [{{"function": "kasa", "parameters": {{"device": "coffee_machine", "action": "on"}}}}], "new_memories": []}}""",
-        """Example - Turn off coffee or espresso machine:
+        """Example - Turn off coffee machine:
 User: "Turn off coffee machine"
 Response: {{"reply": "Turning off coffee machine", "function_calls": [{{"function": "kasa", "parameters": {{"device": "coffee_machine", "action": "off"}}}}], "new_memories": []}}""",
-        """Example - Turn on coffee or espresso machine:
+        """Example - Turn on espresso machine:
 User: "Turn on espresso machine"
 Response: {{"reply": "Turning on espresso machine", "function_calls": [{{"function": "kasa", "parameters": {{"device": "coffee_machine", "action": "on"}}}}], "new_memories": []}}""",
-        """Example - Turn off coffee or espresso machine:
+        """Example - Turn off espresso machine:
 User: "Turn off espresso machine"
 Response: {{"reply": "Turning off espresso machine", "function_calls": [{{"function": "kasa", "parameters": {{"device": "coffee_machine", "action": "off"}}}}], "new_memories": []}}""",
         """Example - Turn on coffee bar lights:
@@ -49,7 +50,6 @@ def execute(parameters, context):
 
     skill_config = context.get("skill_config", {})
 
-    queue_message(f"parameters: {parameters}")
     device = parameters.get("device", "")
     device_name = skill_config.get(device, {})
     action = parameters.get("action", "")
