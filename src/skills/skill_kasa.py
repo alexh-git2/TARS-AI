@@ -19,7 +19,7 @@ SKILL = {
     Triggers: Use when the user wants to control Kasa smart plugs or ask about their status.
       * User wants to turn on or off their coffee or espresso machine
       * User wants to turn on or off their coffee bar lights
-    Example: {{"function": "kasa", "parameters": {{"device_name": "coffee_machine", "action": "off"}}}}""",
+    Example: {{"function": "kasa", "parameters": {{"device": "coffee_machine", "action": "off"}}}}""",
     "examples": [
         """Example - Turn on coffee or espresso machine:
 User: "Turn on coffee machine"
@@ -27,6 +27,12 @@ Response: {{"reply": "Turning on coffee machine", "function_calls": [{{"function
         """Example - Turn off coffee or espresso machine:
 User: "Turn off coffee machine"
 Response: {{"reply": "Turning off coffee machine", "function_calls": [{{"function": "kasa", "parameters": {{"device": "coffee_machine", "action": "off"}}}}], "new_memories": []}}""",
+        """Example - Turn on coffee or espresso machine:
+User: "Turn on espresso machine"
+Response: {{"reply": "Turning on espresso machine", "function_calls": [{{"function": "kasa", "parameters": {{"device": "coffee_machine", "action": "on"}}}}], "new_memories": []}}""",
+        """Example - Turn off coffee or espresso machine:
+User: "Turn off espresso machine"
+Response: {{"reply": "Turning off espresso machine", "function_calls": [{{"function": "kasa", "parameters": {{"device": "coffee_machine", "action": "off"}}}}], "new_memories": []}}""",
         """Example - Turn on coffee bar lights:
 User: "Turn on coffee bar lights"
 Response: {{"reply": "Turning on coffee bar lights", "function_calls": [{{"function": "kasa", "parameters": {{"device": "coffee_bar_lights", "action": "on"}}}}], "new_memories": []}}""",
