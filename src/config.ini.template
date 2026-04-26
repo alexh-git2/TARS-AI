@@ -251,9 +251,9 @@ controller_name = 8BitDo
 
 [BATTERY]
 # Enable battery monitoring (requires INA260 sensor)
-battery_enabled = False
+battery_enabled = True
 # Auto-shutdown at low battery to protect SD card and battery
-battery_auto_shutdown = False
+battery_auto_shutdown = True
 # Battery capacity in mAh (check battery label)
 battery_capacity_mAh = 3000
 # Full charge voltage (3S LiPo: 12.6V, 4S: 16.8V, USB: 5V)
