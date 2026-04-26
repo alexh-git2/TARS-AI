@@ -772,7 +772,7 @@ CONFIG_METADATA = {
         'wake_word_processor': {
             'group': 'wake_word',
             'label': 'Wake Word Engine',
-            'options': ['atomik', 'fastrtc', 'sherpa-onnx'],
+            'options': ['atomik', 'fastrtc', 'sherpa-onnx','picovoice'],
             'description': '"atomik" is built into TARS, works offline, and is the recommended choice. "sherpa-onnx" transcribes audio and matches the wake word offline (Pi5/Pi4). "fastrtc" uses an internet-based service for detection.'
         },
         'atomik_mode': {
