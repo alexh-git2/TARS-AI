@@ -617,6 +617,9 @@ scipy                           # Signal processing for wake word detection
 # Multimedia
 pygame                          # Game development & multimedia support
 
+# Kasa
+python-kasa                     # Kasa smart plug devices
+
 COMMON
 
     if [[ "$PI_VERSION" == "pi5" ]]; then
