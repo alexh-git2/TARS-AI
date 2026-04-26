@@ -16,11 +16,13 @@ requires a separate written license from Charles-Olivier Dion (AtomikSpace).
 
 This license applies only to this file and does not override licenses of other files in the repository.
 """
+
 from datetime import datetime
 import os
 import re
 import time as _time
 from modules.module_messageQue import queue_message
+from modules.module_geolocation import GEOLOCATION
 
 _LOCATION_CACHE_TTL = 86400  # 24 hours — re-resolve if user moves
 _location_cache = {"lat": None, "lon": None, "name": None, "cached_at": 0.0}
@@ -30,6 +32,7 @@ def _get_skills_prompt_text():
     """Get tool definitions from the skills system for LLM prompt injection."""
     try:
         from modules.module_skills import get_skill_manager
+
         skills = get_skill_manager()
         if skills:
             return skills.get_prompt_text()
@@ -41,7 +44,10 @@ def _get_skills_prompt_text():
 def _get_emotion_schema_field(config):
     """Return the emotion JSON field for the prompt schema, or empty string if not using LLM emotions."""
     try:
-        if config['EMOTION']['enabled'] and config['EMOTION'].get('emotion_method', 'classifier') == 'llm':
+        if (
+            config["EMOTION"]["enabled"]
+            and config["EMOTION"].get("emotion_method", "classifier") == "llm"
+        ):
             return ',\n  "emotion": "string (one of: joy, anger, sadness, fear, love, curiosity, surprise, neutral)"'
     except (KeyError, TypeError):
         pass
@@ -51,7 +57,10 @@ def _get_emotion_schema_field(config):
 def _get_emotion_prompt_instruction(config):
     """Return the emotion instruction block when LLM emotion mode is active."""
     try:
-        if config['EMOTION']['enabled'] and config['EMOTION'].get('emotion_method', 'classifier') == 'llm':
+        if (
+            config["EMOTION"]["enabled"]
+            and config["EMOTION"].get("emotion_method", "classifier") == "llm"
+        ):
             return """
    emotion (REQUIRED field)
    Set this to the single emotion that best describes your reply's tone.
@@ -67,6 +76,7 @@ def _get_skills_examples_text():
     """Get skill-specific examples from the skills system for LLM prompt injection."""
     try:
         from modules.module_skills import get_skill_manager
+
         skills = get_skill_manager()
         if skills:
             return skills.get_examples_text()
@@ -79,7 +89,17 @@ def _resolve_location_name(lat, lon):
     global _location_cache
 
     now = _time.monotonic()
-    if (
+    if GEOLOCATION["lat"] and GEOLOCATION["lon"]:
+        _location_cache.update(
+            {
+                "lat": GEOLOCATION["lat"],
+                "lon": GEOLOCATION["lon"],
+                "name": GEOLOCATION["location_name"],
+                "cached_at": _time.monotonic(),
+            }
+        )
+        return _location_cache["name"]
+    elif (
         _location_cache["lat"] == lat
         and _location_cache["lon"] == lon
         and _location_cache["name"]
@@ -89,16 +109,22 @@ def _resolve_location_name(lat, lon):
 
     try:
         import requests
+
         resp = requests.get(
             f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=10",
             headers={"User-Agent": "TARS-AI/5.0"},
-            timeout=5
+            timeout=5,
         )
         resp.raise_for_status()
         data = resp.json()
 
         addr = data.get("address", {})
-        city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("municipality", "")
+        city = (
+            addr.get("city")
+            or addr.get("town")
+            or addr.get("village")
+            or addr.get("municipality", "")
+        )
         state = addr.get("state", "")
         country = addr.get("country", "")
 
@@ -106,7 +132,9 @@ def _resolve_location_name(lat, lon):
         name = ", ".join(parts) if parts else data.get("display_name", "")
 
         if name:
-            _location_cache.update({"lat": lat, "lon": lon, "name": name, "cached_at": _time.monotonic()})
+            _location_cache.update(
+                {"lat": lat, "lon": lon, "name": name, "cached_at": _time.monotonic()}
+            )
             queue_message(f"[LOCATION] Resolved: {name}")
             return name
 
@@ -115,36 +143,37 @@ def _resolve_location_name(lat, lon):
 
     return None
 
-SIMILE_RE = re.compile(r'\blike a \w+', re.IGNORECASE)
+
+SIMILE_RE = re.compile(r"\blike a \w+", re.IGNORECASE)
 
 BOUNCE_RE = re.compile(
     r"(?:how'?s your \w+|how about you|what'?s (?:next|on your|on the)"
     r"|what (?:else )?can i|is there anything|anything (?:else )?(?:i can|you)"
     r"|(?:need|want) (?:any|some)thing)",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
 EXPLAIN_RE = re.compile(
-    r'\b(explain|tell me (?:more|why|how|about|what)|'
-    r'what (?:do you mean|does that mean|is that)|'
-    r'how (?:does|do|is|did|would|could|should)|'
-    r'why (?:does|do|is|did|would|could|should)|'
-    r'can you (?:explain|clarify|break.?down|elaborate|describe|walk me through)|'
-    r'i don\'?t (?:get|understand|follow)|'
-    r'what\'?s (?:the difference|that mean)|'
-    r'help me understand|'
-    r'go into (?:more )?detail|'
-    r'elaborate|clarify|break it down|walk me through)\b',
-    re.IGNORECASE
+    r"\b(explain|tell me (?:more|why|how|about|what)|"
+    r"what (?:do you mean|does that mean|is that)|"
+    r"how (?:does|do|is|did|would|could|should)|"
+    r"why (?:does|do|is|did|would|could|should)|"
+    r"can you (?:explain|clarify|break.?down|elaborate|describe|walk me through)|"
+    r"i don\'?t (?:get|understand|follow)|"
+    r"what\'?s (?:the difference|that mean)|"
+    r"help me understand|"
+    r"go into (?:more )?detail|"
+    r"elaborate|clarify|break it down|walk me through)\b",
+    re.IGNORECASE,
 )
 
 INFO_RE = re.compile(
-    r'\b(what (?:should|can|would|could) i|'
-    r'give me (?:a |some )?(?:tips|advice|ideas|suggestions|recommendations|recipe|list|steps|instructions)|'
-    r'how (?:do i|can i|should i|to)|'
-    r'tell me (?:about|what|how|the)|'
-    r'can you (?:tell|give|show|help|suggest|recommend|list|describe))\b',
-    re.IGNORECASE
+    r"\b(what (?:should|can|would|could) i|"
+    r"give me (?:a |some )?(?:tips|advice|ideas|suggestions|recommendations|recipe|list|steps|instructions)|"
+    r"how (?:do i|can i|should i|to)|"
+    r"tell me (?:about|what|how|the)|"
+    r"can you (?:tell|give|show|help|suggest|recommend|list|describe))\b",
+    re.IGNORECASE,
 )
 
 
@@ -154,8 +183,18 @@ def _detect_user_intent(user_prompt):
         return "explain"
     if INFO_RE.search(lower):
         return "info"
-    greetings = ['how are you', "how's it going", "how's life", "what's up",
-                 'hey', 'hi ', 'hello', 'sup', 'yo ', 'howdy']
+    greetings = [
+        "how are you",
+        "how's it going",
+        "how's life",
+        "what's up",
+        "hey",
+        "hi ",
+        "hello",
+        "sup",
+        "yo ",
+        "howdy",
+    ]
     if any(lower.startswith(g) or lower == g.strip() for g in greetings):
         return "greeting"
     return "general"
@@ -163,12 +202,12 @@ def _detect_user_intent(user_prompt):
 
 def _extract_char_lines(text, char_name):
     lines = []
-    for line in text.split('\n'):
+    for line in text.split("\n"):
         stripped = line.strip()
         if stripped.startswith(f"{char_name}:"):
-            lines.append(stripped[len(char_name) + 1:].strip())
+            lines.append(stripped[len(char_name) + 1 :].strip())
         elif stripped.startswith("{char}:"):
-            lines.append(stripped[len("{char}:"):].strip())
+            lines.append(stripped[len("{char}:") :].strip())
     return " ".join(lines)
 
 
@@ -190,6 +229,7 @@ def _get_speaker_context():
     """
     try:
         from modules.module_identity import get_identity_manager
+
         im = get_identity_manager()
         if im is not None:
             ctx = im.get_identity_context()
@@ -199,6 +239,7 @@ def _get_speaker_context():
         pass
     try:
         from modules.module_speaker_id import get_speaker_id_manager
+
         sid = get_speaker_id_manager()
         if sid is not None:
             return sid.get_speaker_context()
@@ -220,6 +261,7 @@ def _get_active_user_name(config_user_name: str) -> str:
     # Check if this is a webui/text interaction — use config name directly
     try:
         from modules.module_router import get_active_route
+
         if get_active_route().get("source") == "webui":
             return config_user_name
     except Exception:
@@ -227,6 +269,7 @@ def _get_active_user_name(config_user_name: str) -> str:
 
     try:
         from modules.module_identity import get_identity_manager
+
         im = get_identity_manager()
         if im is not None:
             return im.get_active_user_name(config_user_name)
@@ -234,6 +277,7 @@ def _get_active_user_name(config_user_name: str) -> str:
         pass
     try:
         from modules.module_speaker_id import get_speaker_id_manager
+
         sid = get_speaker_id_manager()
         if sid is not None and sid.enabled:
             speaker = sid.get_current_speaker()
@@ -262,16 +306,20 @@ _last_prompt_timings = {}
 # In-memory cache of the last built prompt (replaces last_prompt.txt file IPC)
 _last_built_prompt = None
 
+
 def get_last_prompt():
     """Return the most recently built prompt text (in-memory, no file I/O)."""
     return _last_built_prompt
 
+
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
     global _last_prompt_timings
     import modules.module_speed as speed
-    speed.start('prompt_build')
+
+    speed.start("prompt_build")
 
     from modules.module_config import reload_persona_settings
+
     fresh_traits = reload_persona_settings()
     if fresh_traits:
         character_manager.traits = fresh_traits
@@ -280,14 +328,16 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
     # Speaker ID wait is deferred to right before _get_speaker_context()
     # below — after persona reload and location resolution are done — to
     # give the background observer maximum free processing time.
-    user_name = config['CHAR']['user_name']  # overwritten after speaker ID wait
+    user_name = config["CHAR"]["user_name"]  # overwritten after speaker ID wait
     char_name = character_manager.char_name
-    persona_display = "\n".join([f"{trait}: {value}" for trait, value in character_manager.traits.items()])
+    persona_display = "\n".join(
+        [f"{trait}: {value}" for trait, value in character_manager.traits.items()]
+    )
 
     location_line = ""
-    latitude = config['CHAR'].get('latitude', '')
-    longitude = config['CHAR'].get('longitude', '')
-    location_name = config['CHAR'].get('location_name', '')
+    latitude = config["CHAR"].get("latitude", "")
+    longitude = config["CHAR"].get("longitude", "")
+    location_name = config["CHAR"].get("location_name", "")
 
     if location_name:
         location_line = f"Your current location: {location_name}"
@@ -296,7 +346,9 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
     elif latitude and longitude:
         resolved = _resolve_location_name(latitude, longitude)
         if resolved:
-            location_line = f"Your current location: {resolved} ({latitude}, {longitude})"
+            location_line = (
+                f"Your current location: {resolved} ({latitude}, {longitude})"
+            )
         else:
             location_line = f"Your current coordinates: {latitude}, {longitude}"
     base_prompt = f"""You are {char_name}, an AI assistant that responds in JSON format.
@@ -571,8 +623,8 @@ RIGHT: {{"reply": "Sure, here's a quick example..."}} (then give a Python list e
 13. ALWAYS call take_photo when user wants to SAVE a photo/picture. This is DIFFERENT from capture_camera_view (analyzing what you see) and DIFFERENT from generate_image (AI-creating art).
 14. NEVER call identify_speaker_name unless the speaker is UNKNOWN and explicitly tells you their name. If the system prompt already identifies the speaker by name, do NOT call identify_speaker_name. Do NOT call it with empty parameters.
 
-Current Date: {now.strftime('%m/%d/%Y')}
-Current Time: {now.strftime('%H:%M:%S')}
+Current Date: {now.strftime("%m/%d/%Y")}
+Current Time: {now.strftime("%H:%M:%S")}
 {location_line}
 """
     # Deferred speaker ID wait: block for whatever remains of the 1.5s
@@ -583,9 +635,11 @@ Current Time: {now.strftime('%H:%M:%S')}
     # guaranteeing 100% correct speaker identification in the prompt.
     try:
         import modules.module_llm as _llm_mod
-        _sid_t0 = getattr(_llm_mod, '_sid_start_time', None)
+
+        _sid_t0 = getattr(_llm_mod, "_sid_start_time", None)
         if _sid_t0 is not None:
             from modules.module_speaker_id import get_speaker_id_manager
+
             _sid = get_speaker_id_manager()
             if _sid and _sid.enabled:
                 _sid_elapsed = _time.perf_counter() - _sid_t0
@@ -593,40 +647,45 @@ Current Time: {now.strftime('%H:%M:%S')}
                 if _sid_remaining > 0:
                     identified = _sid.wait_for_identification(timeout=_sid_remaining)
                     if not identified:
-                        queue_message(f"DEBUG: Speaker ID timed out ({_sid_elapsed + _sid_remaining:.1f}s total) — using default name")
+                        queue_message(
+                            f"DEBUG: Speaker ID timed out ({_sid_elapsed + _sid_remaining:.1f}s total) — using default name"
+                        )
             _llm_mod._sid_start_time = None
     except Exception:
         pass
 
     # Now resolve the user name — speaker ID has either finished or timed out
-    user_name = _get_active_user_name(config['CHAR']['user_name'])
+    user_name = _get_active_user_name(config["CHAR"]["user_name"])
 
     # Identity / speaker context (voice ID + face recognition)
-    speed.start('identity')
+    speed.start("identity")
     speaker_ctx = _get_speaker_context()
-    id_dur = speed.stop('identity')
+    id_dur = speed.stop("identity")
     if speaker_ctx:
         base_prompt += f"\n{speaker_ctx}"
 
     # Emotional state context (if emotion detection is enabled)
     try:
-        if config['EMOTION']['enabled']:
+        if config["EMOTION"]["enabled"]:
             from modules.module_dashboard_data import get_emotional_state
+
             emo_state = get_emotional_state()
             active = {k: v for k, v in emo_state.items() if v > 0}
             if active:
                 dominant = max(active, key=active.get)
-                parts = [f"{k}: {v}%" for k, v in sorted(active.items(), key=lambda x: -x[1])]
+                parts = [
+                    f"{k}: {v}%" for k, v in sorted(active.items(), key=lambda x: -x[1])
+                ]
                 base_prompt += f"\n[EMOTIONAL STATE] Your current emotional state based on recent interactions: {', '.join(parts)}. Dominant mood: {dominant}. Let this subtly influence your tone — don't mention these numbers or that you have an emotional state system."
     except Exception:
         pass
 
     # Memory retrieval (long-term + short-term + examples)
-    speed.start('memory')
+    speed.start("memory")
     final_prompt = append_memory_and_examples(
         base_prompt, user_prompt, memory_manager, config, character_manager
     )
-    mem_dur = speed.stop('memory')
+    mem_dur = speed.stop("memory")
 
     if debug:
         queue_message(f"DEBUG PROMPT:\n{final_prompt}")
@@ -635,39 +694,45 @@ Current Time: {now.strftime('%H:%M:%S')}
     global _last_built_prompt
     _last_built_prompt = clean_text(final_prompt)
 
-    total_dur = speed.stop('prompt_build')
+    total_dur = speed.stop("prompt_build")
     _last_prompt_timings = {
-        'identity': id_dur,
-        'memory': mem_dur,
-        'total': total_dur,
+        "identity": id_dur,
+        "memory": mem_dur,
+        "total": total_dur,
     }
 
     return _last_built_prompt
 
+
 def clean_text(text):
     return (
         text.replace("\\\\", "\\")
-            .replace("\\n", "\n")
-            .replace("\\'", "'")
-            .replace('\\"', '"')
-            .replace("<END>", "")
-            .strip()
+        .replace("\\n", "\n")
+        .replace("\\'", "'")
+        .replace('\\"', '"')
+        .replace("<END>", "")
+        .strip()
     )
 
-def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config, character_manager):
+
+def append_memory_and_examples(
+    base_prompt, user_prompt, memory_manager, config, character_manager
+):
     short_term_memory = ""
     past_memory = ""
     conversation_summary = ""
     example_dialog = ""
 
-    total_base_prompt = "".join([
-        base_prompt,
-        f"\n### User: {_get_active_user_name(config['CHAR']['user_name'])}\n### Character: {character_manager.char_name}\n",
-        f"\nUser: {user_prompt}\n\nResponse: "
-    ])
+    total_base_prompt = "".join(
+        [
+            base_prompt,
+            f"\n### User: {_get_active_user_name(config['CHAR']['user_name'])}\n### Character: {character_manager.char_name}\n",
+            f"\nUser: {user_prompt}\n\nResponse: ",
+        ]
+    )
 
-    context_size = int(config['LLM']['contextsize'])
-    base_length = memory_manager.token_count(total_base_prompt).get('length', 0)
+    context_size = int(config["LLM"]["contextsize"])
+    base_length = memory_manager.token_count(total_base_prompt).get("length", 0)
     available_tokens = max(0, context_size - base_length)
 
     # Split token budget: 65% short-term (recent conversation), 35% long-term (RAG + topics)
@@ -677,20 +742,26 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     longterm_budget = available_tokens - shortterm_budget
 
     if shortterm_budget > 0:
-        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(shortterm_budget)
+        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(
+            shortterm_budget
+        )
         # Replace {user}/{char} placeholders with actual names so the LLM
         # sees "Joe: hello" instead of "{user}: hello" in conversation history
-        active_user = _get_active_user_name(config['CHAR']['user_name'])
-        short_term_memory = short_term_memory.replace("{user}", active_user).replace("{char}", character_manager.char_name)
-        shortterm_used = memory_manager.token_count(short_term_memory).get('length', 0)
+        active_user = _get_active_user_name(config["CHAR"]["user_name"])
+        short_term_memory = short_term_memory.replace("{user}", active_user).replace(
+            "{char}", character_manager.char_name
+        )
+        shortterm_used = memory_manager.token_count(short_term_memory).get("length", 0)
         # Give any unused short-term budget back to long-term
-        longterm_budget += (shortterm_budget - shortterm_used)
+        longterm_budget += shortterm_budget - shortterm_used
 
     # Episodic summary — deduct its tokens from longterm budget so it doesn't
     # silently push RAG/topics out of the context window.
     if longterm_budget > 100:
         try:
-            conversation_summary = memory_manager.get_conversation_summary(lookback_hours=24)
+            conversation_summary = memory_manager.get_conversation_summary(
+                lookback_hours=24
+            )
             if conversation_summary:
                 # Fast approximation (~4 chars per token) — good enough for a summary
                 summary_tokens = len(conversation_summary) // 4
@@ -701,14 +772,14 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     if longterm_budget > 0:
         raw_longterm = clean_text(memory_manager.get_longterm_memory(user_prompt))
         if raw_longterm:
-            lt_length = memory_manager.token_count(raw_longterm).get('length', 0)
+            lt_length = memory_manager.token_count(raw_longterm).get("length", 0)
             if lt_length <= longterm_budget:
                 past_memory = raw_longterm
             else:
                 # Truncate to fit — keep topic summary, trim RAG results.
                 # Use fast char/4 approximation per line to avoid expensive
                 # per-line tiktoken calls (was O(n) encoding calls).
-                lines = raw_longterm.split('\n')
+                lines = raw_longterm.split("\n")
                 truncated = []
                 running = 0
                 for line in lines:
@@ -717,22 +788,32 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
                         break
                     truncated.append(line)
                     running += line_len
-                past_memory = '\n'.join(truncated)
-        remaining_tokens = longterm_budget - (len(past_memory) // 4) if past_memory else longterm_budget
+                past_memory = "\n".join(truncated)
+        remaining_tokens = (
+            longterm_budget - (len(past_memory) // 4)
+            if past_memory
+            else longterm_budget
+        )
     else:
         remaining_tokens = 0
 
     if remaining_tokens > 0 and character_manager.example_dialogue:
-        example_length = memory_manager.token_count(character_manager.example_dialogue).get('length', 0)
+        example_length = memory_manager.token_count(
+            character_manager.example_dialogue
+        ).get("length", 0)
         if example_length <= remaining_tokens:
-            active_user_ex = _get_active_user_name(config['CHAR']['user_name'])
-            ex_text = character_manager.example_dialogue.replace("{user}", active_user_ex).replace("{char}", character_manager.char_name)
-            ex_text = ex_text.replace("{{user}}", active_user_ex).replace("{{char}}", character_manager.char_name)
+            active_user_ex = _get_active_user_name(config["CHAR"]["user_name"])
+            ex_text = character_manager.example_dialogue.replace(
+                "{user}", active_user_ex
+            ).replace("{char}", character_manager.char_name)
+            ex_text = ex_text.replace("{{user}}", active_user_ex).replace(
+                "{{char}}", character_manager.char_name
+            )
             example_dialog = f"\nExample Dialogue:\n{ex_text}\n"
 
-    verbosity_val = character_manager.traits.get('verbosity', 50)
-    sarcasm_val = character_manager.traits.get('sarcasm', 50)
-    humor_val = character_manager.traits.get('humor', 50)
+    verbosity_val = character_manager.traits.get("verbosity", 50)
+    sarcasm_val = character_manager.traits.get("sarcasm", 50)
+    humor_val = character_manager.traits.get("humor", 50)
 
     intent = _detect_user_intent(user_prompt)
 
@@ -765,7 +846,9 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
 
     humor_priority_note = ""
     if intent in ("explain", "info"):
-        humor_priority_note = " (User asked a question - ANSWER CLEARLY FIRST, humor is secondary.)"
+        humor_priority_note = (
+            " (User asked a question - ANSWER CLEARLY FIRST, humor is secondary.)"
+        )
 
     if humor_val >= 80:
         if "puns" in recent_humor_used:
@@ -778,7 +861,9 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         else:
             humor_rule = f"INCLUDE 1-2 PUN/WORDPLAY{humor_priority_note}"
     elif humor_val >= 40:
-        humor_rule = "Weave in subtle natural humor if it fits. NO forced jokes, NO similes."
+        humor_rule = (
+            "Weave in subtle natural humor if it fits. NO forced jokes, NO similes."
+        )
     elif humor_val >= 20:
         humor_rule = "VERY SUBTLE WIT - occasional dry observation if natural"
     else:
@@ -801,8 +886,8 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
 
     recent_context_preview = ""
     if short_term_memory and len(short_term_memory) > 0:
-        recent_lines = short_term_memory.strip().split('\n')[-6:]
-        recent_context_preview = '\n'.join(recent_lines)
+        recent_lines = short_term_memory.strip().split("\n")[-6:]
+        recent_context_preview = "\n".join(recent_lines)
 
     if sarcasm_val <= 20:
         sarcasm_rule = "sincere and helpful"
@@ -843,10 +928,10 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"Response ({character_manager.char_name}):"
     )
 
+
 def inject_dynamic_values(template, user_name, char_name):
     return (
-        template
-        .replace("{user}", user_name)
+        template.replace("{user}", user_name)
         .replace("{char}", char_name)
         .replace("'user_input'", user_name)
         .replace("'bot_response'", char_name)
