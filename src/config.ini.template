@@ -20,7 +20,8 @@ location_name = Cheyenne Mountain, Colorado
 latitude = 38.7372207
 longitude = -104.8859561
 # Phrases said immediately after the wake word (JSON array, [] for none)
-responses = ["Hi","Yes?","hey!","What's up?","Can I help you?","What do you need?","I'm here.","You rang?","Yea?","Hey There.","You again?","Affirmative.","Ready.","Standing by.","Go ahead.","Listening.","How can I assist?","At your service.","Waiting.","What do you require?","I hear you.","Acknowledged.","State your request.","What's on your mind?","I'm all ears. Figuratively.","That's me.","Present.","Right here.","Still here.","Something wrong?","Need me?"]
+# ["Hi","Yes?","hey!","What's up?","Can I help you?","What do you need?","I'm here.","You rang?","Yea?","Hey There.","You again?","Affirmative.","Ready.","Standing by.","Go ahead.","Listening.","How can I assist?","At your service.","Waiting.","What do you require?","I hear you.","Acknowledged.","State your request.","What's on your mind?","I'm all ears. Figuratively.","That's me.","Present.","Right here.","Still here.","Something wrong?","Need me?"]
+responses = []
 # Enable/disable filler phrases while waiting for LLM response (true/false)
 enable_thinking_responses = false
 # Filler phrases said while waiting for LLM response (JSON array, [] for none)

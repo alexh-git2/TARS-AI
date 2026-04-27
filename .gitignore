@@ -235,3 +235,4 @@ TARS-AI_Server/bin/*
 TARS-AI_Server/output/*
 TARS-AI_Server/outputs/*
 
+src/config.ini
