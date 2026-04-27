@@ -215,9 +215,11 @@ src/character/**
 !src/character/Bishop/**
 !src/character/JARVIS/
 !src/character/JARVIS/**
+# ignore persona.ini files in character folders.
+src/character/TARS/persona.ini
 # Re-ignore voice models (downloaded from HuggingFace at runtime)
 src/character/*/voice/*.onnx
-src/character/TARS/persona.ini
+
 
 tarsdiscordbot/
 src/memory/prompt_history/
