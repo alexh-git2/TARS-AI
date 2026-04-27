@@ -217,7 +217,7 @@ src/character/**
 !src/character/JARVIS/**
 # Re-ignore voice models (downloaded from HuggingFace at runtime)
 src/character/*/voice/*.onnx
-
+src/character/TARS/persona.ini
 
 tarsdiscordbot/
 src/memory/prompt_history/
@@ -232,3 +232,4 @@ TARS-AI_Server/tts/*
 TARS-AI_Server/bin/*
 TARS-AI_Server/output/*
 TARS-AI_Server/outputs/*
+
