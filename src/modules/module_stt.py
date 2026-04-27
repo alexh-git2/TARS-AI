@@ -254,11 +254,12 @@ class STTManager:
 
     MODEL_RATE = 16000  # Sample rate required by all ML models (VAD, STT, speaker ID)
 
-    WAKE_WORD_RESPONSES = [
-        "Oh! You called?",
-        "Took you long enough. Yes?",
-        "Finally!",
-    ]
+    WAKE_WORD_RESPONSES = []
+    # [
+    #    "Oh! You called?",
+    #    "Took you long enough. Yes?",
+    #    "Finally!",
+    # ]
 
     try:
         _resp = CONFIG["CHAR"]["responses"]
