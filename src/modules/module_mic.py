@@ -27,9 +27,11 @@ import sounddevice as sd
 
 try:
     import soxr as _soxr
+
     _HAS_SOXR = True
 except ImportError:
     from scipy.signal import resample_poly as _resample_poly
+
     _HAS_SOXR = False
 
 MODEL_RATE = 16000
@@ -40,42 +42,26 @@ _device_info = None  # cached (device_idx, native_rate)
 _device_lock = threading.Lock()
 
 
-def _is_real_hw_device(info):
-    """Return True if the device looks like real hardware, not an ALSA plugin.
-
-    ALSA plugin devices (default, dmix, etc.) report 128 channels which is
-    a dead giveaway. Real USB mics report 1-2 channels.
-    """
-    return 1 <= info.get("max_input_channels", 0) <= 32
-
-
 def _find_input_device():
     """Try to find a working input device. Returns (idx, rate) or raises."""
-    # 1. Try the system default — but only if it looks like real hardware.
-    #    ALSA plugin devices (e.g. "default") report 128 channels and may
-    #    hide the actual hardware rate, causing wrong device selection.
+    # 1. Try the system default
     idx = sd.default.device[0]
     if idx is not None and idx >= 0:
         info = sd.query_devices(idx, kind="input")
-        if _is_real_hw_device(info):
+        if info.get("max_input_channels", 0) >= 1:
             return idx, int(info.get("default_samplerate", MODEL_RATE))
 
-    # 2. Default failed or is a plugin — scan for real hardware devices
+    # 2. Default failed — scan all devices
     devices = sd.query_devices()
-    for i, dev in enumerate(devices):
-        if _is_real_hw_device(dev):
-            rate = int(dev.get("default_samplerate", MODEL_RATE))
-            return i, rate
-
-    # 3. Fall back to any device with input channels (including plugins)
     for i, dev in enumerate(devices):
         if dev.get("max_input_channels", 0) >= 1:
             rate = int(dev.get("default_samplerate", MODEL_RATE))
             return i, rate
 
-    # 4. Last resort: ask PortAudio C-level for the default input
+    # 3. Last resort: ask PortAudio C-level for the default input
     try:
         from sounddevice import _lib
+
         pa_idx = _lib.Pa_GetDefaultInputDevice()
         if pa_idx >= 0:
             info = sd.query_devices(pa_idx, kind="input")
@@ -113,7 +99,9 @@ def get_device_info(retries=4, backoff=1.0):
             except Exception as e:
                 if attempt < retries - 1:
                     continue
-                print(f"WARNING: Could not detect mic after {retries} attempts ({e}), using defaults")
+                print(
+                    f"WARNING: Could not detect mic after {retries} attempts ({e}), using defaults"
+                )
                 _device_info = (None, MODEL_RATE)
     return _device_info
 
@@ -129,6 +117,7 @@ def get_device_idx():
 
 
 # ── Resampling helpers ─────────────────────────────────────────────
+
 
 def resample(data, orig_sr, target_sr):
     """Resample audio from orig_sr to target_sr. No-op if rates match.
@@ -163,6 +152,7 @@ def dev_frames(model_frames, native_rate=None):
 # One PortAudio stream, many consumers. Solves USB mic exclusion.
 #
 
+
 class _AudioHub:
     """Singleton that manages a single shared PortAudio input stream.
 
@@ -186,13 +176,13 @@ class _AudioHub:
         self._grace_timer = None
 
         # Mutable dicts — only mutated under self._lock
-        self._callbacks = {}   # {id: callback_fn}
-        self._readers = {}     # {id: (deque, Event, dtype)}
+        self._callbacks = {}  # {id: callback_fn}
+        self._readers = {}  # {id: (deque, Event, dtype)}
 
         # Atomic snapshots — read lock-free by the audio callback.
         # Replaced (single pointer swap) under self._lock after any mutation.
-        self._cb_snapshot = ()           # tuple of callback_fn
-        self._rd_snapshot = ()           # tuple of (buf, evt)
+        self._cb_snapshot = ()  # tuple of callback_fn
+        self._rd_snapshot = ()  # tuple of (buf, evt)
 
         self._next_id = 0
 
@@ -303,7 +293,11 @@ class _AudioHub:
         with self._lock:
             rid = self._next_id
             self._next_id += 1
-            self._readers[rid] = (collections.deque(maxlen=500), threading.Event(), dtype)
+            self._readers[rid] = (
+                collections.deque(maxlen=500),
+                threading.Event(),
+                dtype,
+            )
             self._rebuild_snapshots()
             try:
                 self._ensure_stream()
@@ -328,7 +322,9 @@ class _AudioHub:
         """
         entry = self._readers.get(rid)
         if entry is None:
-            raise RuntimeError("Reader not registered — call start() or use as context manager")
+            raise RuntimeError(
+                "Reader not registered — call start() or use as context manager"
+            )
         buf, evt, dtype = entry
 
         collected = []
@@ -405,6 +401,7 @@ _hub = _AudioHub()
 
 # ── Public stream helpers ──────────────────────────────────────────
 
+
 def open_native_stream(**kwargs):
     """Open an audio stream at the device's native rate.
 
@@ -478,7 +475,9 @@ class _SharedReadStream:
 
     def read(self, n_frames):
         if self._rid is None:
-            raise RuntimeError("Stream not started — call start() or use as context manager")
+            raise RuntimeError(
+                "Stream not started — call start() or use as context manager"
+            )
         return _hub.read(self._rid, n_frames)
 
     def __enter__(self):
