@@ -24,7 +24,8 @@ responses = ["Hi","Yes?","hey!","What's up?","Can I help you?","What do you need
 # Enable/disable filler phrases while waiting for LLM response (true/false)
 enable_thinking_responses = false
 # Filler phrases said while waiting for LLM response (JSON array, [] for none)
-thinking_responses = ["Let me think...","soooo.....","soo....","Let's seeee...","Let me seeee...","Let's see.....","One Moment...","One Moment","hum","humm","Analyzing...","Processing...","Calculating...","Computing...","Running the numbers...","Checking...","One moment...","Scanning data...","Assessing...","Evaluating...","Let me calculate...","Working on it...","Just a moment...","Reviewing...","Compiling...","Cross-referencing...","Thinking it through...","Give me a second...","Hold on..."]
+# ["Let me think...","soooo.....","soo....","Let's seeee...","Let me seeee...","Let's see.....","One Moment...","One Moment","hum","humm","Analyzing...","Processing...","Calculating...","Computing...","Running the numbers...","Checking...","One moment...","Scanning data...","Assessing...","Evaluating...","Let me calculate...","Working on it...","Just a moment...","Reviewing...","Compiling...","Cross-referencing...","Thinking it through...","Give me a second...","Hold on..."]
+thinking_responses = []
 
 [LLM]
 # AI backend: openai | grok | deepinfra | other
