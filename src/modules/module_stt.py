@@ -262,7 +262,7 @@ class STTManager:
 
     try:
         _resp = CONFIG["CHAR"]["responses"]
-        if _resp and _resp.strip() and _resp.strip() != "[]":
+        if _resp and _resp.strip():
             _parsed = json.loads(_resp)
             if isinstance(_parsed, list) and _parsed:
                 WAKE_WORD_RESPONSES = _parsed
